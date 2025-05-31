@@ -1,0 +1,857 @@
+
+{
+  "header": {
+    "title": "Aurum Media",
+    "home": "Inicio",
+    "videos": "Cursos",
+    "live": "En Vivo",
+    "testimonials": "Historias",
+    "login": "Iniciar Sesión",
+    "register": "Registrarse",
+    "adminPanel": "Panel de Admin",
+    "languageSelectorTooltip": "Seleccionar Idioma",
+    "english": "Inglés",
+    "spanish": "Español",
+    "mobileMenuButton": "Abrir menú",
+    "myAccount": "Mi Cuenta",
+    "logout": "Cerrar Sesión"
+  },
+  "footer": {
+    "tagline": "Experimenta contenido de video de lujo como nunca antes.",
+    "quickLinks": "Enlaces Rápidos",
+    "aboutUs": "Sobre Nosotros",
+    "privacyPolicy": "Política de Privacidad",
+    "termsOfService": "Términos de Servicio",
+    "testimonialsTitle": "Testimonios",
+    "shareYourStoryButton": "Comparte Tu Experiencia",
+    "followUs": "Síguenos",
+    "facebook": "Facebook",
+    "instagram": "Instagram",
+    "twitter": "X (Twitter)",
+    "youtube": "YouTube",
+    "copyright": "© {year} {siteTitle}. Todos los derechos reservados.",
+    "socialLink": "Enlace Social",
+    "noSocialLinks": "Los enlaces a redes sociales aparecerán aquí."
+  },
+  "testimonialModal": {
+    "title": "Comparte Tu Experiencia",
+    "description": "¡Nos encantaría conocer tu opinión sobre ONLYfansLY!",
+    "closeButton": "Cerrar"
+  },
+  "testimonialForm": {
+    "yourName": "Tu Nombre (como te registraste)",
+    "yourNamePlaceholder": "Ej: Juan Pérez",
+    "yourEmail": "Tu Email (como te registraste)",
+    "yourEmailPlaceholder": "tu@ejemplo.com",
+    "yourTestimonial": "Tu Testimonio",
+    "yourTestimonialPlaceholder": "Comparte tu opinión aquí...",
+    "photoUrlsLabel": "URLs de Fotos (Opcional)",
+    "photoUrlsPlaceholder": "Ej: https://ejemplo.com/imagen1.jpg, https://ejemplo.com/imagen2.png",
+    "videoUrlsLabel": "URLs de Videos (Opcional)",
+    "videoUrlsPlaceholder": "Ej: https://youtube.com/watch?v=..., https://vimeo.com/...",
+    "urlsHelperText": "Separa múltiples URLs con una coma.",
+    "submitTestimonial": "Enviar Testimonio",
+    "submitting": "Enviando...",
+    "loginToSubmit": "Debes iniciar sesión para enviar un testimonio.",
+    "loadingUser": "Cargando información del usuario...",
+    "toast": {
+      "successTitle": "¡Testimonio Enviado!",
+      "successDescription": "Gracias por tus comentarios. Serán revisados en breve.",
+      "errorTitle": "Envío Fallido",
+      "errorDescription": "No se pudo enviar tu testimonio. Por favor, inténtalo de nuevo.",
+      "genericError": "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.",
+      "loginRequiredTitle": "Inicio de Sesión Requerido",
+      "loginRequiredDescription": "Por favor, inicia sesión antes de enviar un testimonio."
+    }
+  },
+  "homepage": {
+    "hero": {
+      "title": "Descubre Aurum Media",
+      "subtitle": "Sumérgete en una colección curada de contenido de video premium, diseñado para inspirar y cautivar.",
+      "exploreButton": "Explorar Cursos"
+    },
+    "live": {
+      "defaultTitle": "Evento en Vivo",
+      "broadcastingNow": "¡Transmitiendo en Vivo Ahora!",
+      "currentlyOffline": "La transmisión en vivo está actualmente desconectada. ¡Vuelve pronto!",
+      "waitingForStream": "Esperando la transmisión de video...",
+      "connecting": "Conectando al servicio de transmisión en vivo...",
+      "statusOffline": "Muy Pronto!",
+      "streamingIssueTitle": "Problema de Transmisión",
+      "broadcasterDisconnectedError": "La transmisión en vivo ha finalizado ya que el transmisor se desconectó.",
+      "connectionLostError": "Se perdió la conexión con la transmisión. El transmisor podría haberse desconectado o hay un problema de red.",
+      "webrtcSetupError": "No se pudo establecer la conexión WebRTC",
+      "iceCandidateError": "Error al agregar candidato ICE"
+    },
+    "courses": {
+      "title": "Cursos",
+      "titleHighlight": "Destacados",
+      "noCourses": "No hay cursos disponibles en este momento. ¡Vuelve pronto!"
+    },
+    "testimonials": {
+      "title": "Historias",
+      "titleHighlight": ""
+    }
+  },
+  "curatedTestimonials": {
+    "noTestimonials": "No hay historias para mostrar todavía.",
+    "toast": {
+        "loadErrorTitle": "Error al cargar historias",
+        "loadErrorDescription": "No se pudieron cargar las historias curadas en este momento."
+    },
+    "fallbackReason": "Recién agregado y muy valorado.",
+    "defaultAiReason": "Destacado por IA.",
+    "previousPage": "Página Anterior",
+    "nextPage": "Página Siguiente",
+    "pageInfo": "Página {currentPage} de {totalPages}",
+    "viewTestimonialAriaLabel": "Ver testimonio de",
+    "clickToViewMore": "Ver Más",
+    "aiCurationDisabled": "La curación por IA está desactivada. Mostrando testimonios recientes.",
+    "notEnoughForAICuration": "No hay suficientes testimonios para la curación por IA ({currentCount}/{minRequired}). Mostrando testimonios recientes.",
+    "recentTestimonialReason": "Feedback Reciente"
+  },
+  "testimonialDetailModal": {
+    "title": "Testimonio de {author}",
+    "photosTitle": "Fotos",
+    "videosTitle": "Videos",
+    "photoAlt": "Foto del testimonio",
+    "videoAlt": "Video del testimonio",
+    "noMedia": "No se enviaron fotos o videos adicionales con este testimonio."
+  },
+  "adminLayout": {
+    "sidebarTitle": "Aurum Admin",
+    "dashboard": "Tablero",
+    "courses": "Cursos",
+    "liveStream": "Transmisión en Vivo",
+    "testimonials": "Testimonios",
+    "announcements": "Anuncios",
+    "users": "Usuarios",
+    "chat": "Config. Chat",
+    "currencies": "Monedas",
+    "appearance": "Apariencia",
+    "settings": "Configuración",
+    "general": "General",
+    "security": "Seguridad",
+    "account": "Cuenta",
+    "logout": "Cerrar Sesión",
+    "welcomeAdmin": "Bienvenido, {adminName}",
+    "languages": "Idiomas"
+  },
+  "adminDashboard": {
+    "title": "Tablero de Administración",
+    "description": "Resumen de la plataforma Aurum Media.",
+    "customizeAppearanceButton": "Cambiar Apariencia",
+    "overview": {
+      "totalCourses": "Cursos Totales",
+      "pendingTestimonials": "Testimonios Pendientes",
+      "activeUsers": "Usuarios Activos",
+      "siteActivity": "Actividad del Sitio",
+      "siteActivityHigh": "Alta"
+    },
+    "viewDetailsLink": "Ver Detalles",
+    "recentActivity": {
+      "title": "Actividad Reciente",
+      "description": "Últimas actualizaciones y acciones en la plataforma.",
+      "newUser": "Nuevo usuario 'juan.perez@ejemplo.com' registrado.",
+      "pendingTestimonial": "Testimonio de 'Ana S.' pendiente de aprobación.",
+      "newVideo": "Nuevo video 'Atardecer Dorado' subido."
+    },
+    "quickStats": {
+      "title": "Estadísticas Rápidas",
+      "description": "Indicadores clave de rendimiento.",
+      "comingSoon": "Gráfico de análisis próximamente."
+    }
+  },
+  "adminLanguagesPage": {
+    "title": "Configuración de Idioma",
+    "cardTitle": "Configuración de Idioma del Sitio",
+    "titleIconDescription": "Ícono de configuración de idioma",
+    "description": "Configura las preferencias de idioma del sitio web y las opciones de usuario.",
+    "defaultSiteLanguage": "Idioma Predeterminado del Sitio",
+    "english": "Inglés",
+    "spanish": "Español",
+    "allowUserToChoose": "Permitir a los usuarios elegir su idioma",
+    "allowUserToChooseAriaLabel": "Alternar si los usuarios pueden elegir su idioma",
+    "saveChanges": "Guardar Cambios",
+    "settingsSaved": "Configuración de idioma guardada.",
+    "settingsSavedDescription": "Las preferencias de idioma del sitio se han actualizado.",
+    "errorSavingTitle": "Error al Guardar",
+    "genericErrorDescription": "Ocurrió un error inesperado al guardar la configuración de idioma."
+  },
+  "adminLivestream": {
+    "pageTitle": "Control de Transmisión en Vivo",
+    "defaultStreamTitle": "Evento en Vivo de Aurum",
+    "defaultOfflineMessage": "La transmisión en vivo está actualmente desconectada. ¡Vuelve pronto!",
+    "configCard": {
+      "title": "Configuración de Transmisión",
+      "description": "Administra la configuración y el estado de tu transmisión en vivo.",
+      "statusLabel": "Estado en Vivo",
+      "toggleStreamAriaLabel": "Alternar estado de transmisión en vivo",
+      "statusLive": "EN VIVO",
+      "statusOffline": "DESCONECTADO",
+      "currentLiveTitleLabel": "Título Actual de Transmisión en Vivo",
+      "titlePlaceholder": "Ingresa el título de tu transmisión",
+      "currentLiveTitleHelpText": "Este título se envía a los espectadores si estás transmitiendo en vivo. Se actualiza en tiempo real.",
+      "defaultTitleLabel": "Título de Transmisión Predeterminado (Persistente)",
+      "defaultTitlePlaceholder": "Ej: Preguntas y Respuestas Semanales",
+      "defaultTitleHelpText": "Este título se mostrará por defecto y cuando la transmisión esté desconectada. Guardado en la configuración del sitio.",
+      "offlineMessageLabel": "Mensaje de Transmisión Desconectada (Persistente)",
+      "offlineMessagePlaceholder": "Ej: ¡Próxima transmisión el viernes a las 20:00 hs!",
+      "offlineMessageHelpText": "Este mensaje se muestra en la página de inicio cuando la transmisión está desconectada. Guardado en la configuración del sitio.",
+      "cameraPermissionDeniedAlert": {
+        "title": "Acceso a Cámara Denegado",
+        "description": "Por favor, otorga permisos de cámara y micrófono en la configuración de tu navegador para iniciar la transmisión."
+      },
+      "cameraPreviewTitle": "Vista Previa de Cámara",
+      "cameraNotDetectedAlert": {
+        "title": "Cámara No Detectada o Vista Previa Apagada",
+        "description": "Si deseas transmitir, asegúrate de que tu cámara esté conectada y activa la transmisión. La vista previa aparecerá aquí cuando la transmisión esté activa."
+      },
+      "saveSettingsButton": "Guardar Configuraciones Persistentes"
+    },
+    "statsCard": {
+      "title": "Estadísticas de Transmisión",
+      "description": "Número actual de espectadores en tu transmisión en vivo.",
+      "viewersLabel": "Espectadores"
+    },
+    "toast": {
+      "socketConnectedTitle": "Socket Conectado",
+      "socketConnectedDescription": "Conectado exitosamente al servidor de señalización.",
+      "streamErrorTitle": "Error de Transmisión",
+      "setRemoteDescriptionError": "Fallo al establecer la descripción remota para el espectador {viewerId}.",
+      "viewerConnectedTitle": "Actualización de Espectador",
+      "viewerWaitingForStream": "El espectador {viewerId} está esperando que comience la transmisión.",
+      "newViewerTitle": "Nuevo Espectador",
+      "newViewerDescription": "El espectador {viewerId} se ha unido a la transmisión.",
+      "createOfferError": "Fallo al crear la oferta para el espectador {viewerId}.",
+      "viewerLeftTitle": "Espectador Desconectado",
+      "viewerLeftDescription": "El espectador {viewerId} ha abandonado la transmisión.",
+      "socketDisconnectedTitle": "Socket Desconectado",
+      "socketDisconnectedStreamInterrupt": "Desconectado de la señalización. La transmisión puede interrumpirse.",
+      "cameraAccessDeniedTitle": "Acceso a Cámara Denegado",
+      "cameraAccessDeniedDescription": "Por favor, otorga permisos de cámara y micrófono para transmitir.",
+      "unsupportedBrowserTitle": "Navegador No Compatible",
+      "unsupportedBrowserDescription": "Tu navegador no soporta las funciones necesarias para la transmisión.",
+      "errorTitle": "Error",
+      "genericError": "Ocurrió un error inesperado.",
+      "socketNotConnectedError": "Socket no conectado. No se puede alternar la transmisión.",
+      "streamStoppedTitle": "Transmisión Detenida",
+      "streamStoppedDescription": "La transmisión en vivo ha sido detenida.",
+      "streamStartingTitle": "Iniciando Transmisión",
+      "streamStartingDescription": "La transmisión en vivo está comenzando...",
+      "settingsSavedTitle": "Configuración Guardada",
+      "persistentSettingsSavedDescription": "El título de transmisión predeterminado y el mensaje sin conexión se han guardado en la configuración global del sitio."
+    }
+  },
+  "adminCoursesPage": {
+    "title": "Gestión de Cursos",
+    "addCourseButton": "Agregar Nuevo Curso",
+    "saveOrderButton": "Guardar Orden",
+    "listTitle": "Todos los Cursos",
+    "listDescription": "Gestiona todos los cursos en video disponibles en la plataforma.",
+    "noCourses": "No se encontraron cursos. ¡Agrega uno para comenzar!",
+    "table": {
+      "title": "Título",
+      "price": "Precio",
+      "duration": "Duración",
+      "views": "Vistas",
+      "lastUpdated": "Última Actualización",
+      "actions": "Acciones"
+    },
+    "addModal": {
+      "title": "Agregar Nuevo Curso",
+      "description": "Completa los detalles para el nuevo curso."
+    },
+    "editModal": {
+      "title": "Editar Curso",
+      "description": "Actualiza los detalles de este curso."
+    },
+    "form": {
+      "title": "Título",
+      "description": "Descripción",
+      "previewImageUrl": "URL de Imagen Previa",
+      "videoUrl": "URL del Video",
+      "videoUrlDescription": "Enlace directo al archivo de video (ej: .mp4) o URL de YouTube. Los enlaces de YouTube se incrustarán. Los enlaces directos pueden tener problemas de CORS.",
+      "priceArs": "Precio (ARS)",
+      "duration": "Duración",
+      "optional": "Opcional",
+      "cancel": "Cancelar",
+      "createCourse": "Crear Curso",
+      "saveChanges": "Guardar Cambios"
+    },
+    "deleteDialog": {
+      "title": "¿Estás seguro?",
+      "description": "Esta acción no se puede deshacer. Esto eliminará permanentemente el curso \"{courseTitle}\".",
+      "cancel": "Cancelar",
+      "delete": "Eliminar"
+    },
+    "toasts": {
+      "fetchErrorTitle": "Error al Cargar Cursos",
+      "fetchErrorDescription": "No se pudieron cargar los cursos desde el servidor.",
+      "createSuccessTitle": "Curso Creado",
+      "updateSuccessTitle": "Curso Actualizado",
+      "deleteSuccessTitle": "Curso Eliminado",
+      "orderUpdateSuccessTitle": "Orden de Cursos Actualizado",
+      "orderUpdateErrorTitle": "Error al Actualizar Orden",
+      "submitErrorTitle": "Error de Envío",
+      "submitErrorDescription": "Hubo un problema al guardar el curso.",
+      "deleteErrorTitle": "Error al Eliminar",
+      "deleteErrorDescription": "No se pudo eliminar el curso.",
+      "unknownError": "Ocurrió un error desconocido."
+    }
+  },
+   "adminUsersPage": {
+    "title": "Gestión de Usuarios",
+    "addUserButton": "Agregar Nuevo Usuario",
+    "listTitle": "Cuentas de Usuario",
+    "listDescription": "Ver, gestionar y controlar el acceso de los usuarios a la plataforma.",
+    "searchPlaceholder": "Buscar usuarios por nombre, apellido o email...",
+    "noUsersFoundSearch": "No se encontraron usuarios que coincidan con tu búsqueda.",
+    "noUsersToShow": "No hay usuarios para mostrar.",
+    "table": {
+      "name": "Nombre",
+      "email": "Email",
+      "stories": "Historias",
+      "role": "Rol",
+      "verified": "Verificado",
+      "status": "Estado",
+      "canSubmitTestimonial": "Permiso Testimonio",
+      "actions": "Acciones"
+    },
+    "toggleActivationAria": "Alternar activación para {email}",
+    "toggleTestimonialPermissionAria": "Alternar permiso de testimonio para {email}",
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "activated": "activado",
+      "deactivated": "desactivado",
+      "allowed": "permitido",
+      "denied": "denegado"
+    },
+    "deleteDialog": {
+      "title": "¿Estás seguro?",
+      "description": "Esta acción no se puede deshacer. Esto eliminará permanentemente al usuario {email}.",
+      "cancel": "Cancelar",
+      "delete": "Eliminar"
+    },
+    "toasts": {
+      "fetchErrorTitle": "Error al Cargar Usuarios",
+      "fetchErrorDescription": "No se pudieron cargar los usuarios.",
+      "statusUpdateTitle": "Usuario {status}",
+      "statusUpdateSuccess": "El usuario ha sido {status}.",
+      "testimonialPermissionUpdateTitle": "Permiso de Testimonio Actualizado",
+      "testimonialPermissionUpdateSuccess": "El permiso para enviar testimonios ha sido {status}.",
+      "errorTitle": "Error",
+      "deleteSuccessTitle": "Usuario Eliminado",
+      "deleteSuccessDescription": "El usuario ha sido eliminado exitosamente.",
+      "deleteErrorDescription": "No se pudo eliminar el usuario.",
+      "genericErrorDescription": "Ocurrió un error inesperado.",
+      "comingSoonTitle": "Próximamente",
+      "editUserComingSoon": "La funcionalidad de edición de usuario estará disponible pronto.",
+      "addUserComingSoon": "La funcionalidad para agregar usuarios estará disponible pronto."
+    }
+  },
+  "adminTestimonialsPage": {
+    "title": "Gestión de Testimonios",
+    "tabs": {
+      "pending": "Pendientes",
+      "approved": "Aprobados",
+      "denied": "Rechazados"
+    },
+    "cardPending": {
+      "title": "Pendientes de Aprobación",
+      "description": "Revisa y aprueba o rechaza nuevos envíos."
+    },
+    "cardApproved": {
+      "title": "Testimonios Aprobados",
+      "description": "Estos testimonios pueden mostrarse en el sitio."
+    },
+    "cardDenied": {
+      "title": "Testimonios Rechazados",
+      "description": "Estos testimonios no se mostrarán."
+    },
+    "table": {
+      "author": "Autor",
+      "testimonial": "Testimonio",
+      "email": "Email",
+      "date": "Fecha",
+      "actions": "Acciones"
+    },
+    "approveButton": "Aprobar",
+    "denyButton": "Rechazar",
+    "moveToPendingButton": "Mover a Pendiente",
+    "deleteButton": "Eliminar",
+    "viewDetailsTooltip": "Ver Detalles",
+    "deleteDialog": {
+        "title": "¿Estás seguro?",
+        "description": "Esto eliminará permanentemente el testimonio de {author}: \"{text}\". Esta acción no se puede deshacer.",
+        "cancel": "Cancelar",
+        "delete": "Eliminar Permanentemente"
+    },
+    "noTestimonialsInCategory": "No hay testimonios en esta categoría.",
+    "cardAICuration": {
+      "title": "Visualización Curada por IA",
+      "description": "Gestiona cómo la IA selecciona y destaca los testimonios aprobados para su visualización pública."
+    },
+    "curationLoadingText": "Curando...",
+    "aiReasonPrefix": "Razón según IA",
+    "noCuratedTestimonials": "No hay testimonios curados todavía. Asegúrate de que la curación por IA esté habilitada y haya suficientes testimonios aprobados, luego haz clic en \"Curar Ahora\".",
+    "curateNowButton": "Curar Ahora con IA",
+    "toasts": {
+      "fetchErrorTitle": "Error al Cargar Testimonios",
+      "updateSuccessTitle": "Testimonio Actualizado",
+      "updateSuccessDescription": "El estado del testimonio se actualizó a {status}.",
+      "updateErrorTitle": "Error al Actualizar Testimonio",
+      "deleteSuccessTitle": "Testimonio Eliminado",
+      "deleteSuccessDescription": "El testimonio ha sido eliminado exitosamente.",
+      "deleteErrorTitle": "Error al Eliminar Testimonio",
+      "deleteErrorDescription": "No se pudo eliminar el testimonio.",
+      "curationSkippedTitle": "Curación Omitida",
+      "curationSkippedDescription": "No hay testimonios aprobados para curar.",
+      "curationCompleteTitle": "Curación Completa",
+      "curationCompleteDescription": "{count} testimonios destacados por IA.",
+      "curationErrorTitle": "Error de Curación IA",
+      "curationErrorDescription": "No se pudieron curar los testimonios usando IA.",
+      "genericErrorDescription": "Ocurrió un error inesperado.",
+      "aiCurationDisabledAdmin": "La curación por IA está actualmente deshabilitada en la configuración del sitio.",
+      "notEnoughForAIAdmin": "No hay suficientes testimonios aprobados ({currentCount}/{minRequired}) para la curación por IA. El mínimo requerido es {minRequired} (configurable en Configuración General)."
+    }
+  },
+  "adminCurrenciesPage": {
+    "title": "Gestión de Monedas",
+    "cardTitle": "Configuración de Monedas y Tipos de Cambio",
+    "cardDescriptionArsBase": "ARS (Peso Argentino) es la moneda base. Ingresa cuántos ARS equivalen a 1 USD y 1 EUR.",
+    "exchangeRatesTitle": "Tipos de Cambio (vs ARS)",
+    "usdToArsRateLabel": "1 USD = X ARS",
+    "eurToArsRateLabel": "1 EUR = Y ARS",
+    "activeCurrenciesTitle": "Monedas de Visualización Activas",
+    "primaryBadge": "Principal",
+    "statusActive": "Activa",
+    "statusInactive": "Inactiva",
+    "setAsPrimaryButton": "Establecer como Principal",
+    "primaryButtonSet": "Principal",
+    "saveChangesButton": "Guardar Cambios",
+    "allowUserToChooseCurrency": "Permitir a los usuarios elegir su moneda de visualización",
+    "allowUserToChooseCurrencyAriaLabel": "Alternar opción de elección de moneda para usuarios",
+    "toasts": {
+      "errorTitle": "Error",
+      "atLeastOneActiveError": "Al menos una moneda debe estar activa.",
+      "cannotDeactivatePrimaryError": "No se puede desactivar la moneda principal. ARS debe permanecer activa y principal.",
+      "selectPrimaryError": "Se debe seleccionar una moneda principal de entre las activas.",
+      "primaryMustBeArsError": "Para este sistema, ARS debe establecerse como la moneda principal para utilizar correctamente los tipos de cambio USD/EUR a ARS.",
+      "ratesMustBePositiveError": "Los tipos de cambio USD a ARS y EUR a ARS deben ser números positivos.",
+      "settingsSavedTitle": "Configuración Guardada",
+      "settingsSavedUpdatedDescription": "Las preferencias de visualización de monedas y los tipos de cambio han sido actualizados.",
+      "genericErrorDescription": "Ocurrió un error inesperado al guardar la configuración de monedas.",
+      "noActivePrimaryWarning": "No hay una moneda principal activa. Por favor, activa y establece ARS como principal."
+    }
+  },
+  "adminAppearancePage": {
+    "title": "Apariencia del Sitio Web",
+    "cardTitle": "Personalización del Esquema de Colores",
+    "cardDescription": "Ajusta los colores principales de tu sitio web. Los cambios se aplicarán en todo el sitio. Ingresa valores HSL (ej: \"0 0% 10%\") para las entradas de texto.",
+    "hslPlaceholder": "Valor HSL (ej: 45 69% 52%)",
+    "hslHelpText": "Ingresa valor HSL (ej: 45 69% 52%)",
+    "resetButton": "Restablecer a Predeterminados",
+    "saveButton": "Guardar y Aplicar Cambios",
+    "livePreview": {
+      "title": "Vista Previa en Vivo (Ejemplo)",
+      "description": "Esta sección demuestra cómo algunos elementos podrían verse con la configuración actual.",
+      "boxText": "Esta es una caja de vista previa con colores de Fondo y Primer Plano.",
+      "primaryColorText": "Este texto usa el color Primario.",
+      "primaryButton": "Botón Primario",
+      "secondaryButton": "Botón Secundario",
+      "cardText": "Este es un elemento tipo Tarjeta."
+    },
+    "toasts": {
+      "updateTitle": "Apariencia Actualizada",
+      "updateDescription": "Los colores del sitio web han sido guardados y aplicados.",
+      "resetTitle": "Apariencia Restablecida",
+      "resetDescription": "Los colores del sitio web han sido restablecidos a los predeterminados."
+    },
+    "colorLabels": {
+      "primary": "Color Primario",
+      "primary_foreground": "Texto Primario",
+      "background": "Color de Fondo",
+      "foreground": "Color de Texto Principal",
+      "card": "Fondo de Tarjeta",
+      "accent": "Color de Acento (Elementos UI)",
+      "button_default_bg": "Fondo Botón Predeterm. (Primario)",
+      "button_default_text": "Texto Botón Predeterm. (Primer Plano Primario)"
+    }
+  },
+  "videoCard": {
+    "updatedLabel": "Actualizado",
+    "loadingPrice": "Cargando precio...",
+    "watchNowButton": "Ver Ahora",
+    "watchNowButtonAriaLabel": "Ver ahora:",
+    "invalidDate": "Fecha inválida",
+    "viewDetailsAriaLabel": "Ver detalles de"
+  },
+  "videoPlayerModal": {
+    "description": "Disfruta del contenido del video.",
+    "unsupportedVideo": "Tu navegador no soporta la etiqueta de video.",
+    "noVideoUrl": "La URL del video no está disponible."
+  },
+  "courseDetailModal": {
+    "title": "Detalles del Curso",
+    "descriptionTitle": "Descripción",
+    "priceTitle": "Precio",
+    "durationTitle": "Duración",
+    "watchVideoButton": "Ver Video Ahora",
+    "closeButton": "Cerrar",
+    "imageAlt": "Vista previa del curso"
+  },
+  "adminAccountPage": {
+    "title": "Configuración de Cuenta",
+    "cardTitle": "Perfil de Administrador",
+    "cardDescription": "Visualiza y edita la información de tu cuenta de administrador aquí.",
+    "form": {
+        "name": "Nombre",
+        "surname": "Apellido",
+        "email": "Email (Solo lectura)",
+        "phone": "Teléfono",
+        "dni": "DNI",
+        "address": "Dirección",
+        "postalCode": "Código Postal",
+        "city": "Ciudad",
+        "province": "Provincia",
+        "country": "País",
+        "avatarUrl": "URL del Avatar",
+        "avatarUrlPlaceholder": "https://ejemplo.com/avatar.png"
+    },
+    "saveButton": "Guardar Cambios",
+    "noAdminFound": "No se pudo cargar el perfil del administrador. Asegúrate de que ADMIN_EMAIL esté configurado correctamente.",
+    "toasts": {
+        "fetchErrorTitle": "Error al Cargar Perfil",
+        "fetchErrorDescription": "No se pudieron cargar los detalles del perfil del administrador.",
+        "updateSuccessTitle": "Perfil Actualizado",
+        "updateErrorTitle": "Actualización Fallida",
+        "genericError": "Ocurrió un error inesperado."
+    }
+  },
+  "adminSecurityPage": {
+    "title": "Configuración de Seguridad",
+    "cardTitle": "Cambiar Contraseña",
+    "cardDescription": "Actualiza la contraseña de tu cuenta de administrador.",
+    "form": {
+        "currentPassword": "Contraseña Actual",
+        "newPassword": "Nueva Contraseña",
+        "confirmPassword": "Confirmar Nueva Contraseña"
+    },
+    "saveButton": "Cambiar Contraseña",
+    "toasts": {
+        "fetchErrorTitle": "Error",
+        "adminNotFound": "Usuario administrador no encontrado. No se puede cambiar la contraseña.",
+        "adminIdMissing": "ID de administrador no disponible. No se puede proceder.",
+        "errorTitle": "Error",
+        "updateSuccessTitle": "Contraseña Actualizada",
+        "updateErrorTitle": "Actualización Fallida"
+    }
+  },
+  "adminGeneralPage": {
+    "title": "Configuración General",
+    "cardTitle": "Configuración del Sitio",
+    "cardDescription": "Gestiona la configuración general de la plataforma.",
+    "form": {
+      "siteTitle": "Título del Sitio",
+      "siteTitleDescription": "El nombre de tu sitio web, mostrado en las pestañas del navegador y encabezados.",
+      "siteIconUrl": "URL del Ícono del Sitio (Favicon)",
+      "siteIconUrlDescription": "URL para el ícono de tu sitio (ej: .png, .ico, .svg). Se muestra en las pestañas del navegador.",
+      "fileUploadNote": "Nota: La subida directa de archivos para íconos aún no está soportada. Por favor, proporciona una URL a un ícono alojado externamente.",
+      "heroTitle": "Título del Banner Principal (Homepage)",
+      "heroTitlePlaceholder": "Ej: Bienvenidos a Nuestra Plataforma",
+      "heroTitleDescription": "El encabezado principal que se muestra en la página de inicio.",
+      "heroSubtitle": "Subtítulo del Banner Principal (Homepage)",
+      "heroSubtitlePlaceholder": "Ej: Descubre contenido increíble...",
+      "heroSubtitleDescription": "El texto de apoyo debajo del título principal del banner en la página de inicio.",
+      "maintenanceMode": "Modo Mantenimiento",
+      "maintenanceModeDescription": "Desactiva temporalmente el sitio para visitantes, mostrando una página de mantenimiento.",
+      "heroSettingsTitle": "Configuración del Banner Principal",
+      "socialMediaTitle": "Enlaces de Redes Sociales",
+      "socialLinkName": "Nombre de la Red",
+      "socialLinkNamePlaceholder": "Ej: Facebook",
+      "socialLinkUrl": "URL",
+      "addSocialLink": "Agregar Enlace Social",
+      "removeSocialLink": "Eliminar Enlace Social",
+      "socialMediaDescription": "Ingresa las URL completas para tus perfiles de redes sociales. Los nombres comunes intentarán mapear a un ícono.",
+      "aiCurationTitle": "Curación de Testimonios por IA",
+      "aiCurationDescription": "Configura cómo la IA selecciona los testimonios para mostrar en la página de inicio.",
+      "enableAICuration": "Habilitar Curación por IA para Testimonios",
+      "enableAICurationDescription": "Si está deshabilitado, se mostrarán los testimonios aprobados más recientes.",
+      "minTestimonialsForAICuration": "Mínimo de Testimonios Aprobados para Curación por IA",
+      "minTestimonialsForAICurationDescription": "La curación por IA solo se ejecutará si hay al menos esta cantidad de testimonios aprobados. Predeterminado: 5."
+    },
+    "saveButton": "Guardar Configuración",
+    "toasts": {
+      "fetchErrorTitle": "Error al Cargar Configuración",
+      "updateSuccessTitle": "Configuración Actualizada",
+      "updateSuccessDescription": "La configuración general del sitio ha sido guardada en Firestore.",
+      "updateErrorTitle": "Actualización Fallida",
+      "genericError": "Ocurrió un error inesperado."
+    }
+  },
+  "registerPage": {
+    "title": "Crea Tu Cuenta",
+    "description": "Únete a Aurum Media y desbloquea contenido exclusivo.",
+    "form": {
+      "name": "Nombre",
+      "namePlaceholder": "Ej: Juan",
+      "surname": "Apellido",
+      "surnamePlaceholder": "Ej: Pérez",
+      "email": "Email",
+      "emailPlaceholder": "tu@ejemplo.com",
+      "phone": "Teléfono",
+      "phonePlaceholder": "+54911...",
+      "dni": "DNI",
+      "dniPlaceholder": "12345678",
+      "address": "Dirección",
+      "addressPlaceholder": "Av. Siempre Viva 123",
+      "postalCode": "Código Postal",
+      "postalCodePlaceholder": "C1414",
+      "city": "Ciudad",
+      "cityPlaceholder": "Tu Ciudad",
+      "province": "Provincia",
+      "provincePlaceholder": "Tu Provincia",
+      "country": "País",
+      "countryPlaceholder": "Tu País",
+      "password": "Contraseña",
+      "confirmPassword": "Confirmar Contraseña"
+    },
+    "submitButton": "Crear Cuenta",
+    "submittingButton": "Creando Cuenta...",
+    "alreadyHaveAccount": "¿Ya tienes una cuenta?",
+    "loginLink": "Inicia Sesión",
+    "toasts": {
+      "successTitle": "Registro Exitoso",
+      "successDescription": "Revisa tu correo para activar tu cuenta.",
+      "errorTitle": "Error en el Registro",
+      "errorDescription": "No se pudo completar el registro.",
+      "unexpectedErrorTitle": "Error Inesperado",
+      "unexpectedErrorDescription": "Ocurrió un error. Por favor, inténtalo de nuevo."
+    }
+  },
+  "loginPage": {
+    "activateAccountTitle": "Activa Tu Cuenta",
+    "welcomeBackTitle": "Bienvenido de Nuevo",
+    "enterTokenDescription": "Ingresa el token de activación enviado a tu correo electrónico.",
+    "loginToAccessDescription": "Inicia sesión para acceder a tu cuenta de Aurum Media.",
+    "emailLabel": "Correo Electrónico",
+    "emailPlaceholder": "tu@ejemplo.com",
+    "passwordLabel": "Contraseña",
+    "loggingInButton": "Iniciando Sesión...",
+    "loginButton": "Iniciar Sesión",
+    "activationTokenLabel": "Token de Activación",
+    "activationTokenPlaceholder": "Ingresa tu token de 24 caracteres",
+    "verifyingButton": "Verificando...",
+    "activateAccountButton": "Activar Cuenta",
+    "resendingTokenButton": "Reenviando...",
+    "resendTokenButton": "Reenviar Token",
+    "backToLoginButton": "Volver a Iniciar Sesión",
+    "forgotPasswordLink": "¿Olvidaste tu contraseña?",
+    "noAccountPrompt": "¿No tienes una cuenta?",
+    "registerHereLink": "Regístrate aquí",
+    "toasts": {
+      "loginErrorTitle": "Error de Inicio de Sesión",
+      "incorrectCredentials": "Email o contraseña incorrectos.",
+      "unverifiedAccountTitle": "Cuenta no Verificada",
+      "enterActivationToken": "Por favor, ingresa el token de activación enviado a tu correo.",
+      "inactiveAccountTitle": "Cuenta Inactiva",
+      "contactSupport": "Esta cuenta está inactiva. Contacta al soporte.",
+      "loginSuccessTitle": "Inicio de Sesión Exitoso",
+      "welcomeBack": "¡Bienvenido de nuevo!",
+      "activationSuccessTitle": "Activación Exitosa",
+      "activationErrorTitle": "Error de Activación",
+      "tokenVerificationError": "Ocurrió un error al verificar el token.",
+      "tokenResentTitle": "Token Reenviado",
+      "resendErrorTitle": "Error al Reenviar",
+      "tokenResendError": "Ocurrió un error al reenviar el token.",
+      "errorTitle": "Error",
+      "unexpectedError": "Ocurrió un error inesperado."
+    }
+  },
+  "accountPage": {
+    "title": "Mi Cuenta",
+    "editProfileButton": "Editar Perfil",
+    "loginRequiredTitle": "Inicio de Sesión Requerido",
+    "loginRequiredDescription": "Por favor, inicia sesión para ver los detalles de tu cuenta.",
+    "profileSection": {
+      "title": "Mi Perfil",
+      "description": "Tu información personal.",
+      "name": "Nombre",
+      "email": "Email",
+      "phone": "Teléfono",
+      "dni": "DNI",
+      "address": "Dirección",
+      "cityPostal": "Ciudad / Código Postal",
+      "city": "Ciudad",
+      "province": "Provincia",
+      "country": "País",
+      "verified": "Cuenta Verificada",
+      "isVerifiedYes": "Sí",
+      "isVerifiedNo": "No",
+      "notFound": "No se pudo cargar la información del perfil."
+    },
+    "testimonialsSection": {
+      "title": "Mis Historias Enviadas",
+      "description": "Una lista de los testimonios que has enviado.",
+      "table": {
+        "date": "Fecha",
+        "testimonial": "Testimonio",
+        "status": "Estado"
+      },
+      "noTestimonials": "Aún no has enviado ningún testimonio."
+    },
+    "testimonialStatus": {
+        "pending": "Pendiente",
+        "approved": "Aprobado",
+        "denied": "Rechazado"
+    },
+    "toasts": {
+      "profileErrorTitle": "Error al Cargar Perfil",
+      "profileErrorDescription": "No se pudo cargar la información de tu perfil.",
+      "testimonialsErrorTitle": "Error al Cargar Historias",
+      "genericError": "Ocurrió un error inesperado."
+    }
+  },
+  "editAccountPage": {
+    "title": "Editar Perfil",
+    "description": "Actualiza tu información personal.",
+    "form": {
+      "phone": "Teléfono",
+      "address": "Dirección",
+      "postalCode": "Código Postal",
+      "city": "Ciudad",
+      "province": "Provincia",
+      "country": "País"
+    },
+    "saveButton": "Guardar Cambios",
+    "cancelButton": "Cancelar",
+    "toasts": {
+      "profileErrorTitle": "Error al Cargar Perfil",
+      "profileErrorDescription": "No se pudo cargar tu perfil para editar.",
+      "updateSuccessTitle": "Perfil Actualizado",
+      "updateSuccessDescription": "Tu perfil ha sido actualizado exitosamente.",
+      "updateErrorTitle": "Actualización Fallida"
+    }
+  },
+  "datePicker": {
+    "pickDate": "Elige una fecha"
+  },
+  "adminAnnouncementsPage": {
+    "title": "Gestión de Anuncios",
+    "addAnnouncementButton": "Agregar Nuevo Anuncio",
+    "listTitle": "Todos los Anuncios",
+    "listDescription": "Gestiona los anuncios que se muestran a los usuarios en la página de inicio.",
+    "noAnnouncements": "No se encontraron anuncios. ¡Agrega uno para comenzar!",
+    "table": {
+      "title": "Título",
+      "contentType": "Tipo de Contenido",
+      "status": "Estado",
+      "expiryDate": "Fecha de Caducidad",
+      "actions": "Acciones"
+    },
+    "status": {
+        "active": "Activo",
+        "inactive": "Inactivo"
+    },
+    "contentTypeLabels": {
+      "image_only": "Solo Imagen",
+      "text_image": "Texto + Imagen",
+      "text_video": "Texto + Video",
+      "video_only": "Solo Video"
+    },
+    "addModal": {
+      "title": "Agregar Nuevo Anuncio",
+      "description": "Completa los detalles para el nuevo anuncio."
+    },
+    "editModal": {
+      "title": "Editar Anuncio",
+      "description": "Actualiza los detalles de este anuncio."
+    },
+    "form": {
+      "title": "Título",
+      "contentType": "Tipo de Contenido",
+      "text": "Contenido de Texto",
+      "imageUrl": "URL de Imagen",
+      "videoUrl": "URL de Video (YouTube o enlace directo)",
+      "expiryDate": "Fecha de Caducidad",
+      "expiryDatePlaceholder": "Selecciona fecha de caducidad",
+      "isActive": "Activo",
+      "isActiveDescription": "Si está activo, este anuncio podrá mostrarse en la página de inicio.",
+      "cancel": "Cancelar",
+      "createAnnouncement": "Crear Anuncio",
+      "saveChanges": "Guardar Cambios"
+    },
+    "deleteDialog": {
+      "title": "¿Estás seguro?",
+      "description": "Esta acción no se puede deshacer. Esto eliminará permanentemente el anuncio \"{announcementTitle}\".",
+      "cancel": "Cancelar",
+      "delete": "Eliminar"
+    },
+    "toasts": {
+      "fetchErrorTitle": "Error al Cargar Anuncios",
+      "fetchErrorDescription": "No se pudieron cargar los anuncios desde el servidor.",
+      "createSuccessTitle": "Anuncio Creado",
+      "updateSuccessTitle": "Anuncio Actualizado",
+      "deleteSuccessTitle": "Anuncio Eliminado",
+      "submitErrorTitle": "Error de Envío",
+      "submitErrorDescription": "Hubo un problema al guardar el anuncio.",
+      "deleteErrorTitle": "Error al Eliminar",
+      "deleteErrorDescription": "No se pudo eliminar el anuncio.",
+      "unknownError": "Ocurrió un error desconocido."
+    }
+  },
+  "announcementModal": {
+    "imageAlt": "Imagen del Anuncio",
+    "videoAlt": "Video del Anuncio",
+    "closeButton": "Cerrar"
+  },
+  "adminChatPage": {
+    "title": "Configuración Chat WhatsApp",
+    "cardTitle": "Configurar Botón de WhatsApp",
+    "cardDescription": "Gestiona la configuración del botón flotante de chat de WhatsApp en tu sitio web.",
+    "form": {
+      "enableWhatsApp": "Habilitar Botón de Chat de WhatsApp",
+      "enableWhatsAppDescription": "Mostrar un botón de chat de WhatsApp en tu sitio.",
+      "phoneNumber": "Número de Teléfono de WhatsApp",
+      "phoneNumberPlaceholder": "Ej: +5491122334455 (incluye código de país)",
+      "defaultMessage": "Mensaje Predeterminado (Opcional)",
+      "defaultMessagePlaceholder": "Ej: ¡Hola! Estoy interesado en sus servicios.",
+      "defaultMessageDescription": "Este mensaje se completará previamente cuando un usuario haga clic en el botón de chat.",
+      "iconType": "Tipo de Ícono",
+      "iconTypePlaceholder": "Selecciona el tipo de ícono",
+      "customIconUrl": "URL de Ícono Personalizado",
+      "customIconUrlPlaceholder": "https://ejemplo.com/icono-whatsapp.png",
+      "customIconUrlDescription": "Reemplaza el ícono predeterminado de WhatsApp. Tamaño recomendado: cuadrado, fondo transparente.",
+      "customIconUrlTooltip": "Proporciona una URL directa a un archivo de imagen (PNG, SVG preferido). Si está vacío, se usará un ícono de WhatsApp predeterminado.",
+      "buttonSize": "Tamaño del Botón (px)",
+      "buttonSizeDescription": "Diámetro del botón flotante.",
+      "iconSize": "Tamaño del Ícono (px)",
+      "iconSizeDescription": "Tamaño del ícono dentro del botón."
+    },
+    "iconOptions": {
+      "default": "Ícono de WhatsApp Predeterminado",
+      "customUrl": "URL de Imagen Personalizada",
+      "paperclip": "Clip",
+      "smile": "Sonrisa",
+      "moon": "Luna",
+      "sun": "Sol",
+      "phone": "Teléfono",
+      "send": "Enviar",
+      "helpCircle": "Círculo de Ayuda",
+      "messageCircle": "Círculo de Mensaje",
+      "thumbsUp": "Pulgar Arriba",
+      "heart": "Corazón",
+      "star": "Estrella",
+      "bell": "Campana"
+    },
+    "saveButton": "Guardar Configuración de Chat",
+    "toasts": {
+      "updateSuccessTitle": "Configuración de Chat Actualizada",
+      "updateSuccessDescription": "La configuración del chat de WhatsApp ha sido guardada.",
+      "updateErrorTitle": "Actualización Fallida"
+    }
+  }
+}
+
