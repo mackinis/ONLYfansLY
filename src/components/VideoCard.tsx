@@ -136,15 +136,15 @@ export default function VideoCard({ video, onWatchNowClick, onCourseCardClick, d
         </div>
       </CardContent>
       <CardFooter className="p-4 border-t border-border/30 flex justify-between items-center">
-        <div className="flex flex-col items-start"> {/* Changed to flex-col and items-start */}
+        <div className="flex flex-col items-end"> {/* Changed items-start to items-end */}
           {originalPriceDisplay && (
             <span className="line-through text-muted-foreground text-xs">
               {originalPriceDisplay}
             </span>
           )}
-          <div className="flex items-center"> {/* Keep Tag and final price inline */}
-            <Tag className="h-3.5 w-3.5 mr-1 text-primary" /> {/* Adjusted Tag size */}
-            <span className="text-base font-semibold text-primary"> {/* Adjusted final price size */}
+          <div className="flex items-center">
+            <Tag className="h-3.5 w-3.5 mr-1 text-primary" />
+            <span className="text-base font-semibold text-primary">
               {finalPriceDisplay || t('videoCard.loadingPrice')}
             </span>
           </div>

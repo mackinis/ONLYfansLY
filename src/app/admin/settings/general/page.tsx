@@ -12,10 +12,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from "@/components/ui/switch";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as ShadFormDescription } from "@/components/ui/form";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Settings2, Save, Loader2, PlusCircle, Trash2, Link as LinkIcon, Sparkles, Info, Image as ImageIconLucide, Heading1, Ruler, Image as ImageIconShadcn, Camera, Video, दोनों, Ban } from "lucide-react";
+import { Settings2, Save, Loader2, PlusCircle, Trash2, Link as LinkIcon, Sparkles, Info, Image as ImageIconLucide, Heading1, Ruler, Image as ImageIconShadcn, Camera, Video, Ban, Clock, Palette } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { updateSiteSettings } from '@/lib/actions';
-import type { SiteSettings, SocialLink, HeaderDisplayMode, FooterDisplayMode, TestimonialMediaOption } from '@/lib/types';
+import type { SiteSettings, SocialLink, HeaderDisplayMode, FooterDisplayMode, TestimonialMediaOption, HeroTaglineSize } from '@/lib/types';
 import { useTranslation } from '@/context/I18nContext';
 import { Separator } from '@/components/ui/separator';
 
@@ -28,18 +28,22 @@ const socialLinkSchema = z.object({
 
 const siteSettingsFormSchema = z.object({
   siteTitle: z.string().min(1, { message: "Site title cannot be empty." }),
-  siteIconUrl: z.string().url({ message: "Must be a valid URL."}).optional().or(z.literal('')), // Favicon / General Icon
-  headerIconUrl: z.string().url({ message: "Must be a valid URL."}).optional().or(z.literal('')), // Header specific Icon
+  siteIconUrl: z.string().url({ message: "Must be a valid URL."}).optional().or(z.literal('')), 
+  headerIconUrl: z.string().url({ message: "Must be a valid URL."}).optional().or(z.literal('')), 
   heroTitle: z.string().min(1, { message: "Hero title cannot be empty." }),
+  heroTagline: z.string().optional(),
+  heroTaglineColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid HEX color (e.g., #RRGGBB)").optional().or(z.literal('')),
+  heroTaglineSize: z.enum(['sm', 'md', 'lg']).default('md'),
   heroSubtitle: z.string().min(1, { message: "Hero subtitle cannot be empty." }),
   maintenanceMode: z.boolean(),
   socialLinks: z.array(socialLinkSchema).optional().default([]),
   aiCurationEnabled: z.boolean().default(true),
   aiCurationMinTestimonials: z.coerce.number().int().min(0, { message: "Minimum must be 0 or greater."}).default(5),
+  testimonialMediaOptions: z.enum(['none', 'photos', 'videos', 'both']).default('both'),
+  testimonialEditGracePeriodMinutes: z.coerce.number().int().min(0, { message: "Grace period must be 0 or greater."}).default(60),
   headerDisplayMode: z.enum(['logo', 'title', 'both']).default('both'),
   footerDisplayMode: z.enum(['logo', 'title', 'both']).default('logo'),
   footerLogoSize: z.coerce.number().int().positive({message: "Must be a positive integer."}).min(16, {message: "Size must be at least 16px."}).max(200, {message: "Size cannot exceed 200px."}).default(64),
-  testimonialMediaOptions: z.enum(['none', 'photos', 'videos', 'both']).default('both'),
 });
 
 type SiteSettingsFormValues = z.infer<typeof siteSettingsFormSchema>;
@@ -56,15 +60,19 @@ export default function AdminGeneralSettingsPage() {
       siteIconUrl: '',
       headerIconUrl: '',
       heroTitle: 'Discover Aurum Media',
+      heroTagline: '',
+      heroTaglineColor: '#FFFFFF',
+      heroTaglineSize: 'md',
       heroSubtitle: 'Immerse yourself in a curated collection of premium video content, designed to inspire and captivate.',
       maintenanceMode: false,
       socialLinks: [],
       aiCurationEnabled: true,
       aiCurationMinTestimonials: 5,
+      testimonialMediaOptions: 'both',
+      testimonialEditGracePeriodMinutes: 60,
       headerDisplayMode: 'both',
       footerDisplayMode: 'logo',
       footerLogoSize: 64,
-      testimonialMediaOptions: 'both',
     },
   });
 
@@ -80,6 +88,9 @@ export default function AdminGeneralSettingsPage() {
         siteIconUrl: currentGlobalSettings.siteIconUrl || '',
         headerIconUrl: currentGlobalSettings.headerIconUrl || '',
         heroTitle: currentGlobalSettings.heroTitle || 'Discover Aurum Media',
+        heroTagline: currentGlobalSettings.heroTagline || '',
+        heroTaglineColor: currentGlobalSettings.heroTaglineColor || '#FFFFFF',
+        heroTaglineSize: currentGlobalSettings.heroTaglineSize || 'md',
         heroSubtitle: currentGlobalSettings.heroSubtitle || 'Immerse yourself in a curated collection of premium video content, designed to inspire and captivate.',
         maintenanceMode: currentGlobalSettings.maintenanceMode || false,
         socialLinks: (currentGlobalSettings.socialLinks || []).map(link => ({
@@ -90,10 +101,11 @@ export default function AdminGeneralSettingsPage() {
         })),
         aiCurationEnabled: currentGlobalSettings.aiCurationEnabled !== undefined ? currentGlobalSettings.aiCurationEnabled : true,
         aiCurationMinTestimonials: currentGlobalSettings.aiCurationMinTestimonials !== undefined ? currentGlobalSettings.aiCurationMinTestimonials : 5,
+        testimonialMediaOptions: currentGlobalSettings.testimonialMediaOptions || 'both',
+        testimonialEditGracePeriodMinutes: currentGlobalSettings.testimonialEditGracePeriodMinutes !== undefined ? currentGlobalSettings.testimonialEditGracePeriodMinutes : 60,
         headerDisplayMode: currentGlobalSettings.headerDisplayMode || 'both',
         footerDisplayMode: currentGlobalSettings.footerDisplayMode || 'logo',
         footerLogoSize: currentGlobalSettings.footerLogoSize || 64,
-        testimonialMediaOptions: currentGlobalSettings.testimonialMediaOptions || 'both',
       });
     }
   }, [currentGlobalSettings, form]);
@@ -111,15 +123,19 @@ export default function AdminGeneralSettingsPage() {
           siteIconUrl: data.siteIconUrl,
           headerIconUrl: data.headerIconUrl,
           heroTitle: data.heroTitle,
+          heroTagline: data.heroTagline,
+          heroTaglineColor: data.heroTaglineColor,
+          heroTaglineSize: data.heroTaglineSize,
           heroSubtitle: data.heroSubtitle,
           maintenanceMode: data.maintenanceMode,
           socialLinks: socialLinksToSave,
           aiCurationEnabled: data.aiCurationEnabled,
           aiCurationMinTestimonials: data.aiCurationMinTestimonials,
+          testimonialMediaOptions: data.testimonialMediaOptions,
+          testimonialEditGracePeriodMinutes: data.testimonialEditGracePeriodMinutes,
           headerDisplayMode: data.headerDisplayMode,
           footerDisplayMode: data.footerDisplayMode,
           footerLogoSize: data.footerLogoSize,
-          testimonialMediaOptions: data.testimonialMediaOptions,
       });
 
       if (result.success && result.updatedSettings) {
@@ -196,7 +212,7 @@ export default function AdminGeneralSettingsPage() {
               <FormField control={form.control} name="headerDisplayMode" render={({ field }) => (
                 <FormItem className="space-y-3">
                   <FormControl>
-                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
+                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
                       <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="logo" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeLogoOnly')}</FormLabel></FormItem>
                       <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="title" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeTitleOnly')}</FormLabel></FormItem>
                       <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="both" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeBoth')}</FormLabel></FormItem>
@@ -215,7 +231,7 @@ export default function AdminGeneralSettingsPage() {
               <FormField control={form.control} name="footerDisplayMode" render={({ field }) => (
                 <FormItem className="space-y-3">
                   <FormControl>
-                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
+                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
                        <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="logo" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeLogoOnly')}</FormLabel></FormItem>
                       <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="title" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeTitleOnly')}</FormLabel></FormItem>
                       <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="both" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeBoth')}</FormLabel></FormItem>
@@ -248,6 +264,55 @@ export default function AdminGeneralSettingsPage() {
                   <FormLabel>{t('adminGeneralPage.form.heroTitle')}</FormLabel>
                   <FormControl><Input placeholder={t('adminGeneralPage.form.heroTitlePlaceholder')} {...field} /></FormControl>
                   <ShadFormDescription>{t('adminGeneralPage.form.heroTitleDescription')}</ShadFormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="heroTagline" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('adminGeneralPage.form.heroTagline')}</FormLabel>
+                  <FormControl><Input placeholder={t('adminGeneralPage.form.heroTaglinePlaceholder')} {...field} /></FormControl>
+                  <ShadFormDescription>{t('adminGeneralPage.form.heroTaglineDescription')}</ShadFormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="heroTaglineColor" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center"><Palette className="mr-2 h-4 w-4 text-muted-foreground"/>{t('adminGeneralPage.form.heroTaglineColor')}</FormLabel>
+                   <div className="flex items-center space-x-2">
+                        <Input
+                            type="color"
+                            value={field.value || '#FFFFFF'}
+                            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                            className="w-12 h-10 p-1 rounded-md border-input"
+                            aria-label={t('adminGeneralPage.form.heroTaglineColorPickerAriaLabel')}
+                        />
+                        <FormControl>
+                            <Input 
+                                placeholder="#FFFFFF" 
+                                {...field} 
+                                onChange={(e) => field.onChange(e.target.value.toUpperCase())} 
+                                className="flex-grow"
+                            />
+                        </FormControl>
+                    </div>
+                  <ShadFormDescription>{t('adminGeneralPage.form.heroTaglineColorDescription')}</ShadFormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="heroTaglineSize" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('adminGeneralPage.form.heroTaglineSize')}</FormLabel>
+                  <FormControl>
+                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
+                      <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="sm" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.taglineSizeSmall')}</FormLabel></FormItem>
+                      <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="md" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.taglineSizeMedium')}</FormLabel></FormItem>
+                      <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="lg" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.taglineSizeLarge')}</FormLabel></FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                  <ShadFormDescription>{t('adminGeneralPage.form.heroTaglineSizeDescription')}</ShadFormDescription>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -335,6 +400,21 @@ export default function AdminGeneralSettingsPage() {
                   <FormMessage />
                 </FormItem>
               )} />
+              
+              <FormField control={form.control} name="testimonialEditGracePeriodMinutes" render={({ field }) => (
+                <FormItem className="mt-4">
+                    <FormLabel className="flex items-center">
+                        <Clock className="mr-2 h-4 w-4 text-muted-foreground"/>
+                        {t('adminGeneralPage.form.testimonialEditGracePeriodMinutes')}
+                    </FormLabel>
+                    <FormControl>
+                        <Input type="number" placeholder="60" {...field} onChange={event => field.onChange(+event.target.value)} />
+                    </FormControl>
+                    <ShadFormDescription>{t('adminGeneralPage.form.testimonialEditGracePeriodMinutesDescription')}</ShadFormDescription>
+                    <FormMessage />
+                </FormItem>
+              )} />
+
 
               <Separator className="my-6" />
               
@@ -345,7 +425,7 @@ export default function AdminGeneralSettingsPage() {
               <FormField control={form.control} name="testimonialMediaOptions" render={({ field }) => (
                 <FormItem className="space-y-3">
                   <FormControl>
-                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
+                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
                       <FormItem className="flex items-center space-x-2">
                         <FormControl><RadioGroupItem value="none" /></FormControl>
                         <FormLabel className="font-normal">{t('adminGeneralPage.form.mediaOptionNone')}</FormLabel>

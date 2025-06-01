@@ -39,6 +39,19 @@
     "description": "We'd love to hear your feedback about Aurum Media!",
     "closeButton": "Close"
   },
+  "editTestimonialModal": {
+    "title": "Edit Your Testimonial",
+    "description": "Make changes to your submitted testimonial below.",
+    "saveButton": "Save Changes",
+    "savingButton": "Saving...",
+    "cancelButton": "Cancel",
+    "toast": {
+      "successTitle": "Testimonial Updated",
+      "successDescription": "Your testimonial has been successfully updated.",
+      "errorTitle": "Update Failed",
+      "errorDescription": "Could not update your testimonial. Please try again."
+    }
+  },
   "testimonialForm": {
     "yourName": "Your Name (as registered)",
     "yourNamePlaceholder": "e.g., John Doe",
@@ -389,7 +402,26 @@
       "testimonial": "Testimonial",
       "email": "Email",
       "date": "Date",
+      "status": "Status",
       "actions": "Actions"
+    },
+    "status": {
+      "pending": "Pending"
+    },
+    "tooltip": {
+      "userCanEditUntil": "User can edit until: {date}",
+      "timeRemaining": "Time remaining: {time}"
+    },
+    "time": {
+      "day": "day",
+      "days": "days",
+      "hour": "hour",
+      "hours": "hours",
+      "minute": "minute",
+      "minutes": "minutes",
+      "second": "second",
+      "seconds": "seconds",
+      "lessThanAMinute": "less than a minute"
     },
     "approveButton": "Approve",
     "denyButton": "Deny",
@@ -586,15 +618,26 @@
       "headerIconUrl": "Header Icon/Logo URL (Optional)",
       "headerIconUrlDescription": "Specific URL for the icon/logo displayed in the site header. If empty, uses the Site Icon URL.",
       "fileUploadNote": "Note: Direct file upload for icons is not yet supported. Please provide a URL to an externally hosted icon.",
+      "heroSettingsTitle": "Homepage Hero Settings",
       "heroTitle": "Homepage Hero Title",
       "heroTitlePlaceholder": "e.g., Welcome to Our Platform",
       "heroTitleDescription": "The main headline displayed on the homepage.",
+      "heroTagline": "Homepage Tagline (Optional)",
+      "heroTaglinePlaceholder": "e.g., Your source for quality content",
+      "heroTaglineDescription": "A short tagline displayed directly below the main hero title.",
+      "heroTaglineColor": "Tagline Color",
+      "heroTaglineColorPickerAriaLabel": "Tagline color picker",
+      "heroTaglineColorDescription": "Choose a color for the tagline text (HEX format).",
+      "heroTaglineSize": "Tagline Font Size",
+      "heroTaglineSizeDescription": "Select the font size for the tagline.",
+      "taglineSizeSmall": "Small",
+      "taglineSizeMedium": "Medium",
+      "taglineSizeLarge": "Large",
       "heroSubtitle": "Homepage Hero Subtitle",
       "heroSubtitlePlaceholder": "e.g., Discover amazing content...",
-      "heroSubtitleDescription": "The supporting text below the main hero title on the homepage.",
+      "heroSubtitleDescription": "The supporting text below the main hero title and tagline on the homepage.",
       "maintenanceMode": "Maintenance Mode",
       "maintenanceModeDescription": "Temporarily take the site offline for visitors, showing a maintenance page.",
-      "heroSettingsTitle": "Homepage Hero Settings",
       "socialMediaTitle": "Social Media Links",
       "socialLinkName": "Network Name",
       "socialLinkNamePlaceholder": "e.g., Facebook",
@@ -608,6 +651,8 @@
       "enableAICurationDescription": "If disabled, the most recent approved testimonials will be shown instead.",
       "minTestimonialsForAICuration": "Minimum Approved Testimonials for AI Curation",
       "minTestimonialsForAICurationDescription": "AI curation will only run if there are at least this many approved testimonials. Default: 5.",
+      "testimonialEditGracePeriodMinutes": "Testimonial Edit Grace Period (minutes)",
+      "testimonialEditGracePeriodMinutesDescription": "Time (in minutes) users have to edit their testimonial after submission, if it's still pending. 0 for no grace period. Default: 60.",
       "headerDisplayModeTitle": "Header Display Mode",
       "headerDisplayModeDescription": "Choose how the site logo and title are displayed in the header.",
       "footerDisplayModeTitle": "Footer Display Mode",
@@ -740,7 +785,8 @@
       "table": {
         "date": "Fecha",
         "testimonial": "Testimonio",
-        "status": "Estado"
+        "status": "Estado",
+        "actions": "Acciones"
       },
       "noTestimonials": "Aún no has enviado ningún testimonio."
     },
@@ -754,7 +800,10 @@
       "profileErrorDescription": "No se pudo cargar la información de tu perfil.",
       "testimonialsErrorTitle": "Error al Cargar Historias",
       "genericError": "Ocurrió un error inesperado."
-    }
+    },
+    "editButton": "Editar",
+    "editableUntilTooltip": "Puedes editar este testimonio hasta: {date}",
+    "timeRemainingTooltip": "Tiempo restante para editar: {time}"
   },
   "editAccountPage": {
     "title": "Editar Perfil",

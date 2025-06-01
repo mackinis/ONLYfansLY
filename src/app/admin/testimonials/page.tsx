@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CheckCircle, XCircle, MessageSquareText, Sparkles, Loader2, Trash2, Hourglass, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, MessageSquareText, Sparkles, Loader2, Trash2, Hourglass, ExternalLink, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
 import TestimonialDetailModal from '@/components/TestimonialDetailModal';
@@ -25,6 +25,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { addMinutes, format, isAfter, formatDistanceToNowStrict, intervalToDuration } from 'date-fns';
+import { es as esLocale, enUS as enUSLocale } from 'date-fns/locale';
 
 export default function TestimonialsAdminPage() {
   const { t, language, siteSettings, isLoadingSettings } = useTranslation();
@@ -152,7 +155,21 @@ export default function TestimonialsAdminPage() {
     }
   };
 
-  const renderTestimonialTable = (testimonials: Testimonial[], type: 'pending' | 'approved' | 'denied') => (
+  const renderTestimonialTable = (testimonials: Testimonial[], type: 'pending' | 'approved' | 'denied') => {
+    const gracePeriodMinutes = siteSettings?.testimonialEditGracePeriodMinutes ?? 60;
+    const currentLocale = language === 'es' ? esLocale : enUSLocale;
+    
+    const formatRemainingTime = (endDate: Date) => {
+      const duration = intervalToDuration({ start: new Date(), end: endDate });
+      let parts = [];
+      if (duration.days && duration.days > 0) parts.push(`${duration.days} ${t(duration.days > 1 ? 'adminTestimonialsPage.time.days' : 'adminTestimonialsPage.time.day')}`);
+      if (duration.hours && duration.hours > 0) parts.push(`${duration.hours} ${t(duration.hours > 1 ? 'adminTestimonialsPage.time.hours' : 'adminTestimonialsPage.time.hour')}`);
+      if (duration.minutes && duration.minutes > 0) parts.push(`${duration.minutes} ${t(duration.minutes > 1 ? 'adminTestimonialsPage.time.minutes' : 'adminTestimonialsPage.time.minute')}`);
+      if (parts.length === 0 && duration.seconds && duration.seconds > 0) parts.push(`${duration.seconds} ${t(duration.seconds > 1 ? 'adminTestimonialsPage.time.seconds' : 'adminTestimonialsPage.time.second')}`);
+      return parts.join(', ') || t('adminTestimonialsPage.time.lessThanAMinute');
+    };
+
+    return (
     <Table>
       <TableHeader>
         <TableRow>
@@ -160,14 +177,29 @@ export default function TestimonialsAdminPage() {
           <TableHead className="w-[20%]">{t('adminTestimonialsPage.table.email')}</TableHead>
           <TableHead>{t('adminTestimonialsPage.table.testimonial')}</TableHead>
           <TableHead className="w-[15%]">{t('adminTestimonialsPage.table.date')}</TableHead>
+          {type === 'pending' && <TableHead className="w-[10%] text-center">{t('adminTestimonialsPage.table.status')}</TableHead>}
           <TableHead className="text-right w-[20%]">{t('adminTestimonialsPage.table.actions')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {testimonials.length === 0 ? (
-          <TableRow><TableCell colSpan={5} className="h-24 text-center">{t('adminTestimonialsPage.noTestimonialsInCategory')}</TableCell></TableRow>
+          <TableRow><TableCell colSpan={type === 'pending' ? 6 : 5} className="h-24 text-center">{t('adminTestimonialsPage.noTestimonialsInCategory')}</TableCell></TableRow>
         ) : (
-          testimonials.map(item => (
+          testimonials.map(item => {
+            let isEditableByUser = false;
+            let gracePeriodEndDate: Date | null = null;
+            let timeRemainingStr = '';
+
+            if (type === 'pending' && item.status === 'pending') {
+              const submissionDate = new Date(item.date);
+              gracePeriodEndDate = addMinutes(submissionDate, gracePeriodMinutes);
+              isEditableByUser = isAfter(gracePeriodEndDate, new Date());
+              if (isEditableByUser) {
+                timeRemainingStr = formatRemainingTime(gracePeriodEndDate);
+              }
+            }
+
+            return (
             <TableRow key={item.id}>
               <TableCell 
                 className="font-medium cursor-pointer hover:text-primary hover:underline"
@@ -191,6 +223,28 @@ export default function TestimonialsAdminPage() {
                 {item.text}
               </TableCell>
               <TableCell>{new Date(item.date).toLocaleDateString(language)}</TableCell>
+              {type === 'pending' && (
+                <TableCell className="text-center">
+                  {isEditableByUser && gracePeriodEndDate ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center justify-center text-yellow-500">
+                            <Clock className="h-4 w-4 mr-1" />
+                            <span>{t('adminTestimonialsPage.status.pending')}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{t('adminTestimonialsPage.tooltip.userCanEditUntil', { date: format(gracePeriodEndDate, 'Pp', { locale: currentLocale }) })}</p>
+                          <p>{t('adminTestimonialsPage.tooltip.timeRemaining', { time: timeRemainingStr })}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <span>{t('adminTestimonialsPage.status.pending')}</span>
+                  )}
+                </TableCell>
+              )}
               <TableCell className="text-right space-x-1">
                 {type === 'pending' && (
                   <>
@@ -248,11 +302,11 @@ export default function TestimonialsAdminPage() {
                 </Button>
               </TableCell>
             </TableRow>
-          ))
+          )})
         )}
       </TableBody>
     </Table>
-  );
+  )};
   
   if (isLoading || isLoadingSettings) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -344,4 +398,3 @@ export default function TestimonialsAdminPage() {
     </div>
   );
 }
-

@@ -26,11 +26,12 @@ export interface Testimonial {
   text: string;
   author: string;
   userId: string;
-  date: string;
+  date: string; // Submission date (used as createdAt)
   status: 'pending' | 'approved' | 'denied';
   email?: string;
   photoUrls?: string[];
   videoUrls?: string[];
+  updatedAt?: string; // To track last modification
 }
 
 export interface CuratedTestimonial extends Testimonial {
@@ -97,6 +98,7 @@ export interface ColorSetting {
 }
 
 export type TestimonialMediaOption = 'none' | 'photos' | 'videos' | 'both';
+export type HeroTaglineSize = 'sm' | 'md' | 'lg';
 
 export interface SiteSettings {
   siteTitle: string;
@@ -111,10 +113,14 @@ export interface SiteSettings {
   themeColors: ColorSetting[];
   heroTitle: string;
   heroSubtitle: string;
+  heroTagline?: string;
+  heroTaglineColor?: string;
+  heroTaglineSize?: HeroTaglineSize;
   liveStreamDefaultTitle: string;
   liveStreamOfflineMessage: string;
   socialLinks: SocialLink[];
-  testimonialMediaOptions?: TestimonialMediaOption;
+  testimonialMediaOptions: TestimonialMediaOption; // Made non-optional
+  testimonialEditGracePeriodMinutes: number; // Made non-optional
   updatedAt?: string;
   whatsAppEnabled: boolean;
   whatsAppPhoneNumber: string;
@@ -168,4 +174,11 @@ export interface DashboardStats {
   pendingTestimonials: number;
   activeUsers: number;
   totalUsers: number;
+}
+
+// Input type for updating a user's own testimonial
+export interface UpdateUserOwnTestimonialData {
+  text: string;
+  photoUrlsInput?: string;
+  videoUrlsInput?: string;
 }

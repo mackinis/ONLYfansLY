@@ -2,11 +2,13 @@
 'use server';
 
 import { z } from 'zod';
-import type { Testimonial, UserProfile, Video, SiteSettings, SocialLink, Announcement, AnnouncementContentType, HeaderDisplayMode, FooterDisplayMode, ColorSetting, DashboardStats, TestimonialMediaOption } from './types';
+import type { Testimonial, UserProfile, Video, SiteSettings, SocialLink, Announcement, AnnouncementContentType, HeaderDisplayMode, FooterDisplayMode, ColorSetting, DashboardStats, TestimonialMediaOption, UpdateUserOwnTestimonialData, HeroTaglineSize } from './types';
 import { db } from './firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, Timestamp, orderBy, serverTimestamp, deleteDoc, getDoc, setDoc, runTransaction, increment, count } from 'firebase/firestore';
 import { sendActivationEmail } from './emailService';
 import { defaultThemeColorsHex } from './config'; 
+import { addMinutes, isAfter } from 'date-fns';
+
 
 function generateAlphanumericToken(length: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -55,8 +57,9 @@ export async function submitTestimonial(formData: z.infer<typeof testimonialSche
       userId: parsedData.data.userId,
       photoUrls: photoUrls,
       videoUrls: videoUrls,
-      date: serverTimestamp(),
+      date: serverTimestamp(), // This will be the submission date
       status: 'pending' as Testimonial['status'],
+      updatedAt: serverTimestamp(),
     };
     const docRef = await addDoc(collection(db, 'testimonials'), newTestimonialData);
     return {
@@ -68,7 +71,8 @@ export async function submitTestimonial(formData: z.infer<typeof testimonialSche
         photoUrls: newTestimonialData.photoUrls,
         videoUrls: newTestimonialData.videoUrls,
         date: new Date().toISOString(),
-        status: 'pending'
+        status: 'pending',
+        updatedAt: new Date().toISOString(),
       } as Testimonial
     };
   } catch (error) {
@@ -100,10 +104,11 @@ export async function getTestimonials(status?: Testimonial['status'], userId?: s
         text: data.text,
         email: data.email,
         userId: data.userId,
-        date: (data.date as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+        date: (data.date as Timestamp)?.toDate().toISOString() || new Date().toISOString(), // 'date' is submission date
         status: data.status,
         photoUrls: data.photoUrls || [],
         videoUrls: data.videoUrls || [],
+        updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || (data.date as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
       } as Testimonial);
     });
     return testimonials;
@@ -130,6 +135,7 @@ export async function updateTestimonialStatus(id: string, status: Testimonial['s
             status: data.status,
             photoUrls: data.photoUrls || [],
             videoUrls: data.videoUrls || [],
+            updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
         } as Testimonial;
     }
     return null;
@@ -148,6 +154,82 @@ export async function deleteTestimonialById(testimonialId: string) {
   } catch (error) {
     console.error('Error deleting testimonial:', error);
     return { success: false, message: 'Failed to delete testimonial.' };
+  }
+}
+
+const updateUserOwnTestimonialSchema = z.object({
+  text: z.string().min(10, "Testimonial must be at least 10 characters.").max(500),
+  photoUrlsInput: z.string().optional(),
+  videoUrlsInput: z.string().optional(),
+});
+
+export async function updateUserOwnTestimonial(
+  testimonialId: string,
+  userId: string,
+  data: UpdateUserOwnTestimonialData
+) {
+  const validation = updateUserOwnTestimonialSchema.safeParse(data);
+  if (!validation.success) {
+    return { success: false, message: "Invalid testimonial data.", errors: validation.error.flatten().fieldErrors };
+  }
+
+  try {
+    const testimonialRef = doc(db, 'testimonials', testimonialId);
+    const testimonialSnap = await getDoc(testimonialRef);
+
+    if (!testimonialSnap.exists()) {
+      return { success: false, message: "Testimonial not found." };
+    }
+
+    const testimonialData = testimonialSnap.data() as Testimonial;
+
+    if (testimonialData.userId !== userId) {
+      return { success: false, message: "You are not authorized to edit this testimonial." };
+    }
+
+    if (testimonialData.status !== 'pending') {
+      return { success: false, message: "This testimonial can no longer be edited as it has already been processed." };
+    }
+
+    const siteSettings = await getSiteSettings();
+    const gracePeriodMinutes = siteSettings.testimonialEditGracePeriodMinutes || 0;
+    const submissionDate = (testimonialData.date as any instanceof Timestamp) 
+        ? (testimonialData.date as any as Timestamp).toDate() 
+        : new Date(testimonialData.date);
+
+    const gracePeriodEndDate = addMinutes(submissionDate, gracePeriodMinutes);
+
+    if (isAfter(new Date(), gracePeriodEndDate)) {
+      return { success: false, message: "The editing period for this testimonial has expired." };
+    }
+    
+    const mediaOptions = siteSettings.testimonialMediaOptions || 'both';
+    let photoUrls: string[] = testimonialData.photoUrls || [];
+    if ((mediaOptions === 'photos' || mediaOptions === 'both') && validation.data.photoUrlsInput !== undefined) {
+      photoUrls = validation.data.photoUrlsInput.split(',').map(s => s.trim()).filter(s => s && (s.startsWith('http://') || s.startsWith('https://')));
+    } else if (mediaOptions !== 'photos' && mediaOptions !== 'both') {
+      photoUrls = []; // Clear if not allowed
+    }
+
+    let videoUrls: string[] = testimonialData.videoUrls || [];
+    if ((mediaOptions === 'videos' || mediaOptions === 'both') && validation.data.videoUrlsInput !== undefined) {
+      videoUrls = validation.data.videoUrlsInput.split(',').map(s => s.trim()).filter(s => s && (s.startsWith('http://') || s.startsWith('https://')));
+    } else if (mediaOptions !== 'videos' && mediaOptions !== 'both') {
+      videoUrls = []; // Clear if not allowed
+    }
+
+    await updateDoc(testimonialRef, {
+      text: validation.data.text,
+      photoUrls: photoUrls,
+      videoUrls: videoUrls,
+      updatedAt: serverTimestamp(),
+    });
+
+    return { success: true, message: "Testimonial updated successfully." };
+
+  } catch (error) {
+    console.error("Error updating user's own testimonial:", error);
+    return { success: false, message: "Failed to update testimonial. Please try again." };
   }
 }
 
@@ -587,15 +669,13 @@ const videoCourseSchema = z.object({
   previewImageUrl: z.string().url("Preview Image URL must be a valid URL").optional().or(z.literal('')),
   videoUrl: z.string().url("Video URL must be a valid URL"),
   priceArs: z.coerce.number().positive("Price must be a positive number"),
-  discountInput: z.string().optional().or(z.literal('')), // e.g., "10%" or "5000" (for fixed final price)
+  discountInput: z.string().optional().or(z.literal('')), 
   duration: z.string().optional(),
-  // 'order' and 'views' are managed by the system, not directly by this form
-  // finalPriceArs is calculated, not directly from form
 });
 
 interface PriceCalculationResult {
   finalPrice: number;
-  processedDiscountValueForStorage: string | null; // This is what gets stored as discountInput
+  processedDiscountValueForStorage: string | null;
 }
 
 function calculateCoursePrices(
@@ -607,17 +687,27 @@ function calculateCoursePrices(
 
   if (discountInputValue && typeof discountInputValue === 'string' && discountInputValue.trim() !== '') {
     const trimmedDiscount = discountInputValue.trim();
+    processedDiscountValueForStorage = trimmedDiscount; // Store the raw input initially
+
     if (trimmedDiscount.endsWith('%')) {
       const percentage = parseFloat(trimmedDiscount.slice(0, -1));
       if (!isNaN(percentage) && percentage >= 0 && percentage <= 100) {
         finalPrice = originalPrice * (1 - percentage / 100);
-        processedDiscountValueForStorage = `${percentage}%`;
+      } else {
+        // Invalid percentage, reset discount
+        processedDiscountValueForStorage = null;
       }
     } else {
       const fixedFinalPrice = parseFloat(trimmedDiscount);
       if (!isNaN(fixedFinalPrice) && fixedFinalPrice >= 0 && fixedFinalPrice < originalPrice) {
         finalPrice = fixedFinalPrice;
-        processedDiscountValueForStorage = fixedFinalPrice.toString();
+      } else {
+         // Invalid fixed price or not a discount, reset discount for calculation purposes
+         // but keep user's input if they just entered a number not intended as discount
+         // If the fixed price is not less than original, it's not a discount.
+         if (!(fixedFinalPrice < originalPrice)) {
+            processedDiscountValueForStorage = null; // This was not a valid discount.
+         }
       }
     }
   }
@@ -648,9 +738,9 @@ export async function createVideoCourse(data: z.input<typeof videoCourseSchema>)
 
     const docRef = await addDoc(coursesCol, {
       ...restOfData,
-      priceArs: priceArs, // Original price
-      discountInput: processedDiscountValueForStorage, // User's input for discount ("10%" or "79990")
-      finalPriceArs: finalPrice, // Calculated final price
+      priceArs: priceArs, 
+      discountInput: processedDiscountValueForStorage, 
+      finalPriceArs: finalPrice, 
       order: newOrder,
       views: 0,
       createdAt: serverTimestamp(),
@@ -715,13 +805,12 @@ export async function updateVideoCourse(id: string, data: Partial<z.input<typeof
 
     const updatedPayload: Record<string, any> = { ...validation.data };
 
-    // Recalculate finalPriceArs if priceArs or discountInput changes
     const newPriceArs = data.priceArs !== undefined ? data.priceArs : currentData.priceArs;
     const newDiscountInput = data.discountInput !== undefined ? data.discountInput : currentData.discountInput;
 
     if (data.priceArs !== undefined || data.discountInput !== undefined) {
       const { finalPrice, processedDiscountValueForStorage } = calculateCoursePrices(newPriceArs, newDiscountInput);
-      updatedPayload.priceArs = newPriceArs; // Ensure original price is updated if changed
+      updatedPayload.priceArs = newPriceArs; 
       updatedPayload.discountInput = processedDiscountValueForStorage;
       updatedPayload.finalPriceArs = finalPrice;
     }
@@ -828,6 +917,9 @@ const colorSettingSchemaDb = z.object({
   value: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid 6-digit HEX color"),
 });
 
+const validTestimonialMediaOptions = ['none', 'photos', 'videos', 'both'] as const;
+const validHeroTaglineSizes = ['sm', 'md', 'lg'] as const;
+
 const siteSettingsInternalSchema = z.object({
   siteTitle: z.string().default("Aurum Media"),
   siteIconUrl: z.string().url().optional().or(z.literal('')).default(""),
@@ -854,10 +946,14 @@ const siteSettingsInternalSchema = z.object({
   themeColors: z.array(colorSettingSchemaDb).default(() => defaultThemeColorsHex.map(c => ({...c}))),
   heroTitle: z.string().default("Descubre Aurum Media"),
   heroSubtitle: z.string().default("Sumérgete en una colección curada de contenido de video premium, diseñado para inspirar y cautivar."),
+  heroTagline: z.string().optional().default(""),
+  heroTaglineColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid 6-digit HEX color").optional().default("#FFFFFF"),
+  heroTaglineSize: z.enum(validHeroTaglineSizes).optional().default('md'),
   liveStreamDefaultTitle: z.string().default("Evento en Vivo"),
   liveStreamOfflineMessage: z.string().default("La transmisión en vivo está actualmente desconectada. ¡Vuelve pronto!"),
   socialLinks: z.array(socialLinkSchemaDb).default([]),
-  testimonialMediaOptions: z.enum(['none', 'photos', 'videos', 'both']).default('both'),
+  testimonialMediaOptions: z.enum(validTestimonialMediaOptions).default('both'),
+  testimonialEditGracePeriodMinutes: z.coerce.number().int().min(0).default(60),
   updatedAt: z.custom<Timestamp>((val) => val instanceof Timestamp).optional(),
   whatsAppEnabled: z.boolean().default(false),
   whatsAppPhoneNumber: z.string()
@@ -894,6 +990,9 @@ const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
   themeColors: defaultThemeColorsHex.map(c => ({...c})), 
   heroTitle: "Descubre Aurum Media",
   heroSubtitle: "Sumérgete en una colección curada de contenido de video premium, diseñado para inspirar y cautivar.",
+  heroTagline: "",
+  heroTaglineColor: "#FFFFFF", // Default white for dark theme
+  heroTaglineSize: "md",
   liveStreamDefaultTitle: "Evento en Vivo",
   liveStreamOfflineMessage: "La transmisión en vivo está actualmente desconectada. ¡Vuelve pronto!",
   socialLinks: [
@@ -901,6 +1000,7 @@ const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
     { id: `social-${Date.now()}-ig`, name: 'Instagram', url: '', iconName: 'Instagram' },
   ],
   testimonialMediaOptions: 'both',
+  testimonialEditGracePeriodMinutes: 60,
   whatsAppEnabled: false,
   whatsAppPhoneNumber: "",
   whatsAppDefaultMessage: "Hola! Estoy interesado en sus servicios.",
@@ -930,8 +1030,8 @@ export async function getSiteSettings(): Promise<SiteSettings> {
       needsUpdateInDb = true; 
     }
 
+    // Ensure themeColors are correctly initialized/merged
     let finalThemeColors = [...defaultThemeColorsHex.map(c => ({...c, value: c.defaultValueHex }))]; 
-
     if (currentData.themeColors && Array.isArray(currentData.themeColors) && currentData.themeColors.length > 0) {
       const existingColorsMap = new Map(currentData.themeColors.map(c => [c.id, c]));
       finalThemeColors = defaultThemeColorsHex.map(defaultColor => {
@@ -952,13 +1052,12 @@ export async function getSiteSettings(): Promise<SiteSettings> {
               }
           }
       }
-
     } else {
       needsUpdateInDb = true; 
     }
     currentData.themeColors = finalThemeColors;
 
-
+    // Ensure socialLinks have IDs
     if (!Array.isArray(currentData.socialLinks)) {
         currentData.socialLinks = defaultSiteSettingsInput.socialLinks || [];
         needsUpdateInDb = true;
@@ -971,19 +1070,42 @@ export async function getSiteSettings(): Promise<SiteSettings> {
         }
     });
     
+    // Ensure footerLogoSize has a default if missing
     if (currentData.footerLogoSize === undefined || typeof currentData.footerLogoSize !== 'number' || currentData.footerLogoSize <= 0) {
         currentData.footerLogoSize = defaultSiteSettingsInput.footerLogoSize;
         needsUpdateInDb = true;
     }
     
+    // Ensure headerIconUrl has a default if missing
     if (currentData.headerIconUrl === undefined) {
         currentData.headerIconUrl = defaultSiteSettingsInput.headerIconUrl;
         needsUpdateInDb = true;
     }
-    
-    if (!currentData.testimonialMediaOptions) {
+
+    // Ensure testimonialMediaOptions has a default if missing or invalid
+    if (currentData.testimonialMediaOptions === undefined || !validTestimonialMediaOptions.includes(currentData.testimonialMediaOptions as any)) {
         currentData.testimonialMediaOptions = defaultSiteSettingsInput.testimonialMediaOptions;
         needsUpdateInDb = true;
+    }
+    
+    // Ensure testimonialEditGracePeriodMinutes has a default if missing or invalid
+    if (currentData.testimonialEditGracePeriodMinutes === undefined || typeof currentData.testimonialEditGracePeriodMinutes !== 'number' || currentData.testimonialEditGracePeriodMinutes < 0) {
+      currentData.testimonialEditGracePeriodMinutes = defaultSiteSettingsInput.testimonialEditGracePeriodMinutes;
+      needsUpdateInDb = true;
+    }
+
+    // Ensure hero tagline fields have defaults if missing
+    if (currentData.heroTagline === undefined) {
+      currentData.heroTagline = defaultSiteSettingsInput.heroTagline;
+      needsUpdateInDb = true;
+    }
+    if (currentData.heroTaglineColor === undefined || !/^#[0-9A-Fa-f]{6}$/.test(currentData.heroTaglineColor)) {
+      currentData.heroTaglineColor = defaultSiteSettingsInput.heroTaglineColor;
+      needsUpdateInDb = true;
+    }
+    if (currentData.heroTaglineSize === undefined || !validHeroTaglineSizes.includes(currentData.heroTaglineSize as any)) {
+      currentData.heroTaglineSize = defaultSiteSettingsInput.heroTaglineSize;
+      needsUpdateInDb = true;
     }
 
 
@@ -1002,7 +1124,7 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   } catch (error) {
     console.error('Error fetching or creating site settings:', error);
     const fallbackSettings = siteSettingsInternalSchema.parse(defaultSiteSettingsInput);
-    fallbackSettings.themeColors = defaultThemeColorsHex.map(c => ({...c}));
+    fallbackSettings.themeColors = defaultThemeColorsHex.map(c=>({...c}));
     fallbackSettings.socialLinks = (fallbackSettings.socialLinks || []).map((link, index) => ({
         id: link.id || `social-fallback-${Date.now()}-${index}`,
         ...link,
@@ -1039,6 +1161,13 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
       const logoSize = Number(data.footerLogoSize);
       updateData.footerLogoSize = isNaN(logoSize) || logoSize <= 0 ? defaultSiteSettingsInput.footerLogoSize : logoSize;
     }
+    if (data.testimonialEditGracePeriodMinutes !== undefined) {
+      const gracePeriod = Number(data.testimonialEditGracePeriodMinutes);
+      updateData.testimonialEditGracePeriodMinutes = isNaN(gracePeriod) || gracePeriod < 0 ? defaultSiteSettingsInput.testimonialEditGracePeriodMinutes : gracePeriod;
+    }
+    if (data.heroTaglineColor && !/^#[0-9A-Fa-f]{6}$/.test(data.heroTaglineColor)) {
+        updateData.heroTaglineColor = defaultSiteSettingsInput.heroTaglineColor;
+    }
 
 
     if (data.activeCurrencies && !Array.isArray(data.activeCurrencies)) {
@@ -1062,10 +1191,16 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
       }));
     }
     
-    if (data.testimonialMediaOptions && ['none', 'photos', 'videos', 'both'].includes(data.testimonialMediaOptions)) {
+    if (data.testimonialMediaOptions && validTestimonialMediaOptions.includes(data.testimonialMediaOptions as any)) {
         updateData.testimonialMediaOptions = data.testimonialMediaOptions;
     } else if (data.hasOwnProperty('testimonialMediaOptions')) { 
-        delete updateData.testimonialMediaOptions; 
+        updateData.testimonialMediaOptions = defaultSiteSettingsInput.testimonialMediaOptions;
+    }
+    
+    if (data.heroTaglineSize && validHeroTaglineSizes.includes(data.heroTaglineSize as any)) {
+        updateData.heroTaglineSize = data.heroTaglineSize;
+    } else if (data.hasOwnProperty('heroTaglineSize')) {
+        updateData.heroTaglineSize = defaultSiteSettingsInput.heroTaglineSize;
     }
 
 
@@ -1074,7 +1209,12 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
     await setDoc(settingsRef, updateData, { merge: true });
 
     const updatedSettingsSnap = await getDoc(settingsRef);
-    let fullUpdatedSettings: SiteSettings = { ...defaultSiteSettingsInput, themeColors: defaultThemeColorsHex.map(c=>({...c})), ...updateData, updatedAt: new Date().toISOString() };
+    let fullUpdatedSettings: SiteSettings = { 
+      ...defaultSiteSettingsInput, 
+      themeColors: defaultThemeColorsHex.map(c=>({...c})), 
+      ...updateData, 
+      updatedAt: new Date().toISOString() 
+    };
 
     if (updatedSettingsSnap.exists()) {
         const updatedDataFromDb = updatedSettingsSnap.data();
@@ -1106,8 +1246,20 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
         if (mergedData.headerIconUrl === undefined) {
             mergedData.headerIconUrl = defaultSiteSettingsInput.headerIconUrl;
         }
-        if (!mergedData.testimonialMediaOptions) {
+        if (mergedData.testimonialMediaOptions === undefined || !validTestimonialMediaOptions.includes(mergedData.testimonialMediaOptions as any)) {
             mergedData.testimonialMediaOptions = defaultSiteSettingsInput.testimonialMediaOptions;
+        }
+        if (mergedData.testimonialEditGracePeriodMinutes === undefined || typeof mergedData.testimonialEditGracePeriodMinutes !== 'number' || mergedData.testimonialEditGracePeriodMinutes < 0) {
+            mergedData.testimonialEditGracePeriodMinutes = defaultSiteSettingsInput.testimonialEditGracePeriodMinutes;
+        }
+        if (mergedData.heroTagline === undefined) {
+          mergedData.heroTagline = defaultSiteSettingsInput.heroTagline;
+        }
+        if (mergedData.heroTaglineColor === undefined || !/^#[0-9A-Fa-f]{6}$/.test(mergedData.heroTaglineColor)) {
+          mergedData.heroTaglineColor = defaultSiteSettingsInput.heroTaglineColor;
+        }
+        if (mergedData.heroTaglineSize === undefined || !validHeroTaglineSizes.includes(mergedData.heroTaglineSize as any)) {
+          mergedData.heroTaglineSize = defaultSiteSettingsInput.heroTaglineSize;
         }
 
         const parsedData = siteSettingsInternalSchema.parse(mergedData);

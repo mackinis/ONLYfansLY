@@ -39,6 +39,19 @@
     "description": "¡Nos encantaría conocer tu opinión sobre ONLYfansLY!",
     "closeButton": "Cerrar"
   },
+  "editTestimonialModal": {
+    "title": "Edita Tu Testimonio",
+    "description": "Realiza cambios en tu testimonio enviado a continuación.",
+    "saveButton": "Guardar Cambios",
+    "savingButton": "Guardando...",
+    "cancelButton": "Cancelar",
+    "toast": {
+      "successTitle": "Testimonio Actualizado",
+      "successDescription": "Tu testimonio ha sido actualizado exitosamente.",
+      "errorTitle": "Actualización Fallida",
+      "errorDescription": "No se pudo actualizar tu testimonio. Por favor, inténtalo de nuevo."
+    }
+  },
   "testimonialForm": {
     "yourName": "Tu Nombre (como te registraste)",
     "yourNamePlaceholder": "Ej: Juan Pérez",
@@ -389,7 +402,26 @@
       "testimonial": "Testimonio",
       "email": "Email",
       "date": "Fecha",
+      "status": "Estado",
       "actions": "Acciones"
+    },
+    "status": {
+      "pending": "Pendiente"
+    },
+    "tooltip": {
+      "userCanEditUntil": "El usuario puede editar hasta: {date}",
+      "timeRemaining": "Tiempo restante: {time}"
+    },
+    "time": {
+      "day": "día",
+      "days": "días",
+      "hour": "hora",
+      "hours": "horas",
+      "minute": "minuto",
+      "minutes": "minutos",
+      "second": "segundo",
+      "seconds": "segundos",
+      "lessThanAMinute": "menos de un minuto"
     },
     "approveButton": "Aprobar",
     "denyButton": "Rechazar",
@@ -586,15 +618,26 @@
       "headerIconUrl": "URL del Ícono/Logo del Encabezado (Opcional)",
       "headerIconUrlDescription": "URL específica para el ícono/logo mostrado en el encabezado del sitio. Si está vacío, usa la URL del Ícono del Sitio.",
       "fileUploadNote": "Nota: La subida directa de archivos para íconos aún no está soportada. Por favor, proporciona una URL a un ícono alojado externamente.",
+      "heroSettingsTitle": "Configuración del Banner Principal",
       "heroTitle": "Título del Banner Principal (Homepage)",
       "heroTitlePlaceholder": "Ej: Bienvenidos a Nuestra Plataforma",
       "heroTitleDescription": "El encabezado principal que se muestra en la página de inicio.",
+      "heroTagline": "Lema del Banner Principal (Homepage, Opcional)",
+      "heroTaglinePlaceholder": "Ej: Tu fuente de contenido de calidad",
+      "heroTaglineDescription": "Un lema corto que se muestra directamente debajo del título principal del banner.",
+      "heroTaglineColor": "Color del Lema",
+      "heroTaglineColorPickerAriaLabel": "Selector de color del lema",
+      "heroTaglineColorDescription": "Elige un color para el texto del lema (formato HEX).",
+      "heroTaglineSize": "Tamaño de Fuente del Lema",
+      "heroTaglineSizeDescription": "Selecciona el tamaño de fuente para el lema.",
+      "taglineSizeSmall": "Pequeño",
+      "taglineSizeMedium": "Mediano",
+      "taglineSizeLarge": "Grande",
       "heroSubtitle": "Subtítulo del Banner Principal (Homepage)",
       "heroSubtitlePlaceholder": "Ej: Descubre contenido increíble...",
-      "heroSubtitleDescription": "El texto de apoyo debajo del título principal del banner en la página de inicio.",
+      "heroSubtitleDescription": "El texto de apoyo debajo del título principal del banner y el lema en la página de inicio.",
       "maintenanceMode": "Modo Mantenimiento",
       "maintenanceModeDescription": "Desactiva temporalmente el sitio para visitantes, mostrando una página de mantenimiento.",
-      "heroSettingsTitle": "Configuración del Banner Principal",
       "socialMediaTitle": "Enlaces de Redes Sociales",
       "socialLinkName": "Nombre de la Red",
       "socialLinkNamePlaceholder": "Ej: Facebook",
@@ -608,6 +651,8 @@
       "enableAICurationDescription": "Si está deshabilitado, se mostrarán los testimonios aprobados más recientes.",
       "minTestimonialsForAICuration": "Mínimo de Testimonios Aprobados para Curación por IA",
       "minTestimonialsForAICurationDescription": "La curación por IA solo se ejecutará si hay al menos esta cantidad de testimonios aprobados. Predeterminado: 5.",
+      "testimonialEditGracePeriodMinutes": "Período de Gracia para Editar Testimonios (minutos)",
+      "testimonialEditGracePeriodMinutesDescription": "Tiempo (en minutos) que los usuarios tienen para editar su testimonio después de enviarlo, si aún está pendiente. 0 para ningún período de gracia. Predeterminado: 60.",
       "headerDisplayModeTitle": "Modo de Visualización del Encabezado",
       "headerDisplayModeDescription": "Elige cómo se muestran el logo y el título del sitio en el encabezado.",
       "footerDisplayModeTitle": "Modo de Visualización del Pie de Página",
@@ -740,7 +785,8 @@
       "table": {
         "date": "Fecha",
         "testimonial": "Testimonio",
-        "status": "Estado"
+        "status": "Estado",
+        "actions": "Acciones"
       },
       "noTestimonials": "Aún no has enviado ningún testimonio."
     },
@@ -754,7 +800,10 @@
       "profileErrorDescription": "No se pudo cargar la información de tu perfil.",
       "testimonialsErrorTitle": "Error al Cargar Historias",
       "genericError": "Ocurrió un error inesperado."
-    }
+    },
+    "editButton": "Editar",
+    "editableUntilTooltip": "Puedes editar este testimonio hasta: {date}",
+    "timeRemainingTooltip": "Tiempo restante para editar: {time}"
   },
   "editAccountPage": {
     "title": "Editar Perfil",

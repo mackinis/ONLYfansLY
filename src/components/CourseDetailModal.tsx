@@ -125,13 +125,13 @@ export default function CourseDetailModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
               <div>
                 <h4 className="text-xs text-muted-foreground uppercase tracking-wider">{t('courseDetailModal.priceTitle')}</h4>
-                <div className="flex flex-col items-start"> {/* Changed to flex-col and items-start */}
+                <div className="flex flex-col items-end"> {/* Changed items-start to items-end */}
                   {originalPriceDisplay && (
                     <span className="line-through text-muted-foreground text-sm">
                       {originalPriceDisplay}
                     </span>
                   )}
-                  <div className="flex items-center mt-0.5"> {/* Keep Tag and final price inline */}
+                  <div className="flex items-center mt-0.5"> 
                     <Tag className="h-5 w-5 mr-1.5 text-primary" />
                     <p className="text-lg font-semibold text-primary">
                       {finalPriceDisplay}

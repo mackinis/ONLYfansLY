@@ -4,7 +4,7 @@
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import VideoCard from '@/components/VideoCard';
-import type { Video, SiteSettings, ActiveCurrencySetting, ExchangeRates, Announcement } from '@/lib/types';
+import type { Video, SiteSettings, ActiveCurrencySetting, ExchangeRates, Announcement, HeroTaglineSize } from '@/lib/types';
 import CuratedTestimonialsDisplay from '@/components/CuratedTestimonialsDisplay';
 import VideoPlayerModal from '@/components/VideoPlayerModal';
 import AnnouncementModal from '@/components/AnnouncementModal';
@@ -16,12 +16,13 @@ import { io, Socket } from 'socket.io-client';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useTranslation } from '@/context/I18nContext';
 import { getVideoCourses, getAnnouncements, incrementVideoCourseViews } from '@/lib/actions';
+import { cn } from '@/lib/utils';
 
 const PC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 export default function HomePage() {
-  const { t, siteSettings, isLoadingSettings: isLoadingSiteSettings, displayCurrency, // Use displayCurrency from context
-    exchangeRates: contextExchangeRates // Assuming exchangeRates are also in context or part of siteSettings
+  const { t, siteSettings, isLoadingSettings: isLoadingSiteSettings, displayCurrency, 
+    exchangeRates: contextExchangeRates 
   } = useTranslation();
 
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -42,8 +43,7 @@ export default function HomePage() {
   const [selectedCourseForDetail, setSelectedCourseForDetail] = useState<Video | null>(null);
   const [isCourseDetailModalOpen, setIsCourseDetailModalOpen] = useState(false);
 
-  // const [displayCurrency, setDisplayCurrency] = useState<ActiveCurrencySetting | null>(null); // Removed, use from context
-  const [currentExchangeRates, setCurrentExchangeRates] = useState<ExchangeRates | null>(null); // Keep or use from context
+  const [currentExchangeRates, setCurrentExchangeRates] = useState<ExchangeRates | null>(null); 
 
   const [currentAnnouncement, setCurrentAnnouncement] = useState<Announcement | null>(null);
   const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
@@ -54,8 +54,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (siteSettings) {
-      // displayCurrency is now from context, no need to set it here
-      setCurrentExchangeRates(siteSettings.exchangeRates); // Or use contextExchangeRates if available
+      setCurrentExchangeRates(siteSettings.exchangeRates); 
       setStreamTitleToDisplay(siteLiveStreamDefaultTitle || t('homepage.live.defaultTitle'));
     }
   }, [siteSettings, siteLiveStreamDefaultTitle, t]);
@@ -93,7 +92,7 @@ export default function HomePage() {
             }
           }
         } else {
-          announcementToShow = ann; // If not showOnce, it's a candidate
+          announcementToShow = ann; 
           break;
         }
       }
@@ -243,9 +242,17 @@ export default function HomePage() {
   }
 
   const displayedCourses = videoCourses.slice(0, 3);
-  // Use contextExchangeRates or fallback to siteSettings.exchangeRates for VideoCard and CourseDetailModal
   const effectiveExchangeRates = currentExchangeRates || siteSettings.exchangeRates;
 
+  const getTaglineSizeClass = (size?: HeroTaglineSize) => {
+    switch (size) {
+      case 'sm': return 'text-base md:text-lg'; // Smaller than subtitle
+      case 'lg': return 'text-xl md:text-2xl'; // Larger than default subtitle
+      case 'md':
+      default:
+        return 'text-lg md:text-xl'; // Same as subtitle or a default
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -253,9 +260,20 @@ export default function HomePage() {
       <main className="flex-grow">
         <section className="py-16 md:py-24 bg-gradient-to-br from-background to-card/50">
           <div className="container mx-auto px-4 text-center">
-            <h1 className="font-headline text-4xl md:text-6xl font-bold text-primary mb-6">
+            <h1 className="font-headline text-4xl md:text-6xl font-bold text-primary mb-4">
               {siteSettings.heroTitle || t('homepage.hero.title')}
             </h1>
+            {siteSettings.heroTagline && (
+              <p 
+                className={cn(
+                  "mb-4 mx-auto max-w-2xl", 
+                  getTaglineSizeClass(siteSettings.heroTaglineSize)
+                )}
+                style={{ color: siteSettings.heroTaglineColor || 'inherit' }}
+              >
+                {siteSettings.heroTagline}
+              </p>
+            )}
             <p className="text-lg md:text-xl text-foreground/80 max-w-2xl mx-auto mb-8">
               {siteSettings.heroSubtitle || t('homepage.hero.subtitle')}
             </p>
