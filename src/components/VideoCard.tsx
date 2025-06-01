@@ -13,15 +13,16 @@ import { cn } from '@/lib/utils';
 interface VideoCardProps {
   video: Video;
   onWatchNowClick: (video: Video) => void;
-  onCourseCardClick: (video: Video) => void; // New prop
-  displayCurrency: ActiveCurrencySetting;
-  exchangeRates: ExchangeRates;
+  onCourseCardClick: (video: Video) => void;
+  displayCurrency: ActiveCurrencySetting | null; 
+  exchangeRates: ExchangeRates | null; 
 }
 
 export default function VideoCard({ video, onWatchNowClick, onCourseCardClick, displayCurrency, exchangeRates }: VideoCardProps) {
   const { t, language } = useTranslation();
   const [formattedUpdatedAt, setFormattedUpdatedAt] = useState<string | null>(null);
-  const [displayPrice, setDisplayPrice] = useState<string | null>(null);
+  const [originalPriceDisplay, setOriginalPriceDisplay] = useState<string | null>(null);
+  const [finalPriceDisplay, setFinalPriceDisplay] = useState<string | null>(null);
 
   useEffect(() => {
     if (video.updatedAt) {
@@ -39,41 +40,60 @@ export default function VideoCard({ video, onWatchNowClick, onCourseCardClick, d
   }, [video.updatedAt, language, t]);
 
   useEffect(() => {
-    if (video.priceArs && displayCurrency && exchangeRates) {
-      let price = video.priceArs;
-      let symbol = displayCurrency.symbol;
-      let targetLocale = 'es-AR'; 
+    if (displayCurrency && exchangeRates && video) {
+        const originalPrice = video.priceArs;
+        // Use finalPriceArs if it exists and is a valid number, otherwise default to originalPrice
+        const finalPrice = (typeof video.finalPriceArs === 'number' && !isNaN(video.finalPriceArs)) 
+                            ? video.finalPriceArs 
+                            : originalPrice;
 
-      if (displayCurrency.code === 'USD') {
-        price = video.priceArs / exchangeRates.usdToArs;
-        targetLocale = 'en-US';
-      } else if (displayCurrency.code === 'EUR') {
-        price = video.priceArs / exchangeRates.eurToArs;
-        targetLocale = 'de-DE'; 
-      }
-      
-      try {
-        setDisplayPrice(`${symbol}${price.toLocaleString(targetLocale, { minimumFractionDigits: displayCurrency.code === 'ARS' ? 0 : 2, maximumFractionDigits: displayCurrency.code === 'ARS' ? 0 : 2 })}`);
-      } catch(e) {
-         setDisplayPrice(`${symbol}${price.toFixed(displayCurrency.code === 'ARS' ? 0 : 2)}`);
-      }
+        const formatPrice = (price: number, currency: ActiveCurrencySetting, rates: ExchangeRates) => {
+            let p = price;
+            let sym = currency.symbol;
+            let loc = language === 'es' ? 'es-AR' : 'en-US';
 
-    } else if (video.priceArs) {
-      setDisplayPrice(`${video.priceArs.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ARS (raw)`);
+            if (currency.code === 'USD') {
+                p = price / rates.usdToArs;
+                loc = 'en-US';
+            } else if (currency.code === 'EUR') {
+                p = price / rates.eurToArs;
+                loc = language === 'es' ? 'es-ES' : 'de-DE';
+            }
+            try {
+                return `${sym}${p.toLocaleString(loc, { minimumFractionDigits: currency.code === 'ARS' ? 0 : 2, maximumFractionDigits: currency.code === 'ARS' ? 0 : 2 })}`;
+            } catch(e) {
+                return `${sym}${p.toFixed(currency.code === 'ARS' ? 0 : 2)}`;
+            }
+        };
+
+        const currentFinalPriceStr = formatPrice(finalPrice, displayCurrency, exchangeRates);
+        setFinalPriceDisplay(currentFinalPriceStr);
+
+        // Show original price strikethrough if there's a valid discount
+        if (video.discountInput && video.discountInput.trim() !== '' && typeof video.finalPriceArs === 'number' && video.finalPriceArs < originalPrice) {
+            const currentOriginalPriceStr = formatPrice(originalPrice, displayCurrency, exchangeRates);
+            setOriginalPriceDisplay(currentOriginalPriceStr);
+        } else {
+            setOriginalPriceDisplay(null); // No discount or final price is not less than original
+        }
+
+    } else if (video?.priceArs) { // Fallback if displayCurrency or rates are not ready
+        setOriginalPriceDisplay(null);
+        setFinalPriceDisplay(`${video.priceArs.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ARS`);
+    } else {
+        setOriginalPriceDisplay(null);
+        setFinalPriceDisplay(t('videoCard.loadingPrice'));
     }
-     else {
-      setDisplayPrice(t('videoCard.loadingPrice'));
-    }
-  }, [video.priceArs, displayCurrency, exchangeRates, t]);
+  }, [video, displayCurrency, exchangeRates, language, t]);
 
 
   const previewSrc = video.previewImageUrl || `https://placehold.co/600x400/1A1A1A/D4AF37?text=${encodeURIComponent(video.title)}`;
   const dataAiHintValue = video.title.split(' ').slice(0, 2).join(' ').toLowerCase() || 'course video';
 
   return (
-    <Card 
+    <Card
       className="overflow-hidden shadow-lg hover:shadow-primary/20 transition-shadow duration-300 ease-in-out flex flex-col h-full rounded-lg border-border/50 cursor-pointer group"
-      onClick={() => onCourseCardClick(video)} // Make entire card clickable
+      onClick={() => onCourseCardClick(video)}
       role="button"
       tabIndex={0}
       aria-label={`${t('videoCard.viewDetailsAriaLabel')} ${video.title}`}
@@ -116,17 +136,24 @@ export default function VideoCard({ video, onWatchNowClick, onCourseCardClick, d
         </div>
       </CardContent>
       <CardFooter className="p-4 border-t border-border/30 flex justify-between items-center">
-        <div className="flex items-center">
-          <Tag className="h-4 w-4 mr-1.5 text-primary" />
-          <span className="text-lg font-semibold text-primary">
-            {displayPrice || t('videoCard.loadingPrice')}
-          </span>
+        <div className="flex flex-col items-start"> {/* Changed to flex-col and items-start */}
+          {originalPriceDisplay && (
+            <span className="line-through text-muted-foreground text-xs">
+              {originalPriceDisplay}
+            </span>
+          )}
+          <div className="flex items-center"> {/* Keep Tag and final price inline */}
+            <Tag className="h-3.5 w-3.5 mr-1 text-primary" /> {/* Adjusted Tag size */}
+            <span className="text-base font-semibold text-primary"> {/* Adjusted final price size */}
+              {finalPriceDisplay || t('videoCard.loadingPrice')}
+            </span>
+          </div>
         </div>
-        <Button 
-            variant="default" 
-            size="sm" 
-            onClick={(e) => { 
-                e.stopPropagation(); // Prevent card's onClick from firing
+        <Button
+            variant="default"
+            size="sm"
+            onClick={(e) => {
+                e.stopPropagation();
                 onWatchNowClick(video);
             }}
             aria-label={`${t('videoCard.watchNowButtonAriaLabel')} ${video.title}`}
@@ -137,4 +164,3 @@ export default function VideoCard({ video, onWatchNowClick, onCourseCardClick, d
     </Card>
   );
 }
-

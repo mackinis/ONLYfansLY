@@ -21,7 +21,7 @@ import { useTranslation } from '@/context/I18nContext';
 import { submitTestimonial } from '@/lib/actions';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { SessionUserProfile } from '@/lib/types';
+import type { SessionUserProfile, TestimonialMediaOption } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 
 const testimonialFormSchema = z.object({
@@ -35,16 +35,17 @@ const testimonialFormSchema = z.object({
 
 type TestimonialFormValues = z.infer<typeof testimonialFormSchema>;
 
-// Interface to include isOpen, matching the TestimonialModal's usage
 interface TestimonialSubmissionFormProps {
   isOpen?: boolean;
 }
 
 export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmissionFormProps) {
   const { toast } = useToast();
-  const { t } = useTranslation();
+  const { t, siteSettings, isLoadingSettings } = useTranslation();
   const [loggedInUser, setLoggedInUser] = useState<SessionUserProfile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
+  
+  const [effectiveMediaOptions, setEffectiveMediaOptions] = useState<TestimonialMediaOption>('both');
 
   const form = useForm<TestimonialFormValues>({
     resolver: zodResolver(testimonialFormSchema),
@@ -57,9 +58,14 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
       videoUrlsInput: '',
     },
   });
+  
+  useEffect(() => {
+    if (!isLoadingSettings && siteSettings) {
+      setEffectiveMediaOptions(siteSettings.testimonialMediaOptions || 'both');
+    }
+  }, [siteSettings, isLoadingSettings]);
 
   useEffect(() => {
-    // Only re-initialize if the modal is being opened or if isOpen prop is explicitly managed
     if (isOpen === undefined || isOpen) { 
       setIsLoadingUser(true);
       if (typeof window !== 'undefined') {
@@ -79,12 +85,10 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
           } catch (e) {
             console.error("Failed to parse user profile", e);
             setLoggedInUser(null);
-            // Reset to empty if parsing fails
             form.reset({ author: '', text: '', email: '', userId: '', photoUrlsInput: '', videoUrlsInput: '' });
           }
         } else {
           setLoggedInUser(null);
-          // Reset to empty if no user profile in session
           form.reset({ author: '', text: '', email: '', userId: '', photoUrlsInput: '', videoUrlsInput: '' });
         }
       }
@@ -107,8 +111,8 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
       email: loggedInUser.email,
       userId: loggedInUser.id,
       text: data.text,
-      photoUrlsInput: data.photoUrlsInput,
-      videoUrlsInput: data.videoUrlsInput,
+      photoUrlsInput: (effectiveMediaOptions === 'photos' || effectiveMediaOptions === 'both') ? data.photoUrlsInput : undefined,
+      videoUrlsInput: (effectiveMediaOptions === 'videos' || effectiveMediaOptions === 'both') ? data.videoUrlsInput : undefined,
     });
 
     if (result.success) {
@@ -133,13 +137,12 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
     }
   }
   
-  // If isOpen is explicitly false, don't render the form (matches behavior of modal controlling visibility)
   if (isOpen === false) return null;
 
 
-  if (isLoadingUser) {
+  if (isLoadingUser || isLoadingSettings) {
     return (
-      <div className="flex items-center justify-center py-4 h-[60vh]"> {/* Match height if form is not rendered */}
+      <div className="flex items-center justify-center py-4 h-[60vh]">
         <Loader2 className="mr-2 h-6 w-6 animate-spin text-primary" />
         <p>{t('testimonialForm.loadingUser')}</p>
       </div>
@@ -148,7 +151,7 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
 
   if (!loggedInUser) {
     return (
-      <div className="text-center py-4 h-[60vh] flex flex-col items-center justify-center"> {/* Match height */}
+      <div className="text-center py-4 h-[60vh] flex flex-col items-center justify-center">
         <p className="mb-4 text-lg">{t('testimonialForm.loginToSubmit')}</p>
         <Button asChild size="lg">
           <Link href="/login">{t('header.login')}</Link>
@@ -156,6 +159,9 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
       </div>
     );
   }
+
+  const showPhotoInput = effectiveMediaOptions === 'photos' || effectiveMediaOptions === 'both';
+  const showVideoInput = effectiveMediaOptions === 'videos' || effectiveMediaOptions === 'both';
 
   return (
     <div className="max-h-[60vh] overflow-y-auto rounded-md border p-4 shadow-sm bg-card text-card-foreground">
@@ -200,34 +206,41 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="photoUrlsInput"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('testimonialForm.photoUrlsLabel')}</FormLabel>
-                <FormControl>
-                  <Textarea {...field} rows={2} placeholder={t('testimonialForm.photoUrlsPlaceholder')} className="resize-none bg-background/90" />
-                </FormControl>
-                <FormDescription>{t('testimonialForm.urlsHelperText')}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="videoUrlsInput"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('testimonialForm.videoUrlsLabel')}</FormLabel>
-                <FormControl>
-                  <Textarea {...field} rows={2} placeholder={t('testimonialForm.videoUrlsPlaceholder')} className="resize-none bg-background/90" />
-                </FormControl>
-                <FormDescription>{t('testimonialForm.urlsHelperText')}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {showPhotoInput && (
+            <FormField
+              control={form.control}
+              name="photoUrlsInput"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('testimonialForm.photoUrlsLabel')}</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} rows={2} placeholder={t('testimonialForm.photoUrlsPlaceholder')} className="resize-none bg-background/90" />
+                  </FormControl>
+                  <FormDescription>{t('testimonialForm.urlsHelperText')}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+          {showVideoInput && (
+            <FormField
+              control={form.control}
+              name="videoUrlsInput"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('testimonialForm.videoUrlsLabel')}</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} rows={2} placeholder={t('testimonialForm.videoUrlsPlaceholder')} className="resize-none bg-background/90" />
+                  </FormControl>
+                  <FormDescription>{t('testimonialForm.urlsHelperText')}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+          {(effectiveMediaOptions === 'none' && !showPhotoInput && !showVideoInput) && (
+            <p className="text-sm text-muted-foreground p-2 border rounded-md bg-muted/50">{t('testimonialForm.mediaSubmissionDisabled')}</p>
+          )}
           <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
             {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {form.formState.isSubmitting
@@ -238,6 +251,4 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
       </Form>
     </div>
   );
-}
-
-    
+}   

@@ -8,13 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Radio, Settings, StopCircle, Video as VideoIcon, AlertTriangle, Save } from "lucide-react";
+import { Radio, Settings, StopCircle, Video as VideoIcon, AlertTriangle, Save, Mic, MicOff, Loader2, VolumeX, Volume2, Users } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { io, Socket } from 'socket.io-client';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useTranslation } from '@/context/I18nContext';
 import { updateSiteSettings } from '@/lib/actions';
 import type { SiteSettings } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 
 const PC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -24,9 +25,9 @@ export default function LiveStreamAdminPage() {
   const { toast } = useToast();
 
   const [isStreaming, setIsStreaming] = useState(false);
-  const [currentLiveStreamTitle, setCurrentLiveStreamTitle] = useState(''); // For live updates via socket
-  const [localDefaultStreamTitle, setLocalDefaultStreamTitle] = useState(''); // For Firestore
-  const [localOfflineMessage, setLocalOfflineMessage] = useState(''); // For Firestore
+  const [currentLiveStreamTitle, setCurrentLiveStreamTitle] = useState('');
+  const [localDefaultStreamTitle, setLocalDefaultStreamTitle] = useState('');
+  const [localOfflineMessage, setLocalOfflineMessage] = useState('');
 
   const [socket, setSocket] = useState<Socket | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -35,6 +36,9 @@ export default function LiveStreamAdminPage() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [viewerCount, setViewerCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isMicrophoneMuted, setIsMicrophoneMuted] = useState(false);
+  const [isLocalPreviewMuted, setIsLocalPreviewMuted] = useState(true);
+
 
   useEffect(() => {
     if (siteSettings) {
@@ -51,19 +55,16 @@ export default function LiveStreamAdminPage() {
 
     newSocket.on('connect', () => {
       console.log('Admin connected to Socket.IO server', newSocket.id);
-      toast({ title: t('adminLivestream.toast.socketConnectedTitle'), description: t('adminLivestream.toast.socketConnectedDescription') });
       if (isStreaming && localStream) { 
         newSocket.emit('register-broadcaster', { streamTitle: currentLiveStreamTitle });
       }
     });
 
     newSocket.on('answer-from-viewer', async ({ viewerId, answer }) => {
-      console.log('Admin received answer from viewer:', viewerId, answer);
       const pc = peerConnectionsRef.current.get(viewerId);
       if (pc && pc.signalingState !== 'closed') {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
-          console.log('Admin set remote description for viewer:', viewerId);
         } catch (error) {
           console.error('Error setting remote description for viewer:', viewerId, error);
           toast({ title: t('adminLivestream.toast.streamErrorTitle'), description: t('adminLivestream.toast.setRemoteDescriptionError', { viewerId: viewerId as string }), variant: 'destructive' });
@@ -75,7 +76,6 @@ export default function LiveStreamAdminPage() {
     });
 
     newSocket.on('candidate-from-viewer', ({ viewerId, candidate }) => {
-      console.log('Admin received ICE candidate from viewer:', viewerId, candidate);
       const pc = peerConnectionsRef.current.get(viewerId);
       if (pc && pc.signalingState !== 'closed' && candidate) {
         pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => {
@@ -86,19 +86,12 @@ export default function LiveStreamAdminPage() {
 
     newSocket.on('new-viewer', async ({ viewerId }) => {
       if (!localStream) {
-        console.log('Admin: New viewer connected, but local stream is not ready.');
-        toast({ title: t('adminLivestream.toast.viewerConnectedTitle'), description: t('adminLivestream.toast.viewerWaitingForStream', { viewerId : viewerId as string}), variant: 'default' });
         return;
       }
-      console.log('Admin: New viewer connected:', viewerId);
-      
       if (peerConnectionsRef.current.has(viewerId)) {
-        console.log(`Admin: Peer connection for viewer ${viewerId} already exists. Closing old one.`);
         peerConnectionsRef.current.get(viewerId)?.close();
         peerConnectionsRef.current.delete(viewerId);
       }
-
-      toast({ title: t('adminLivestream.toast.newViewerTitle'), description: t('adminLivestream.toast.newViewerDescription', { viewerId: viewerId as string }) });
 
       const pc = new RTCPeerConnection(PC_CONFIG);
       peerConnectionsRef.current.set(viewerId, pc);
@@ -108,25 +101,21 @@ export default function LiveStreamAdminPage() {
 
       pc.onicecandidate = event => {
         if (event.candidate && newSocket && newSocket.connected) {
-          console.log('Admin sending ICE candidate to viewer:', viewerId, event.candidate);
           newSocket.emit('candidate-to-viewer', { viewerId, candidate: event.candidate });
         }
       };
       
       pc.oniceconnectionstatechange = () => {
-        console.log(`Admin: ICE connection state change for viewer ${viewerId}: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
              if (pc.signalingState !== 'closed') pc.close();
              peerConnectionsRef.current.delete(viewerId);
              setViewerCount(peerConnectionsRef.current.size);
-             console.log(`Admin: Cleaned up peer connection for viewer ${viewerId} due to ICE state ${pc.iceConnectionState}`);
         }
       };
 
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        console.log('Admin sending offer to viewer:', viewerId, offer);
         if (newSocket && newSocket.connected) {
           newSocket.emit('offer-to-viewer', { viewerId, offer });
         }
@@ -140,28 +129,21 @@ export default function LiveStreamAdminPage() {
     });
     
     newSocket.on('viewer-disconnected', ({ viewerId }) => {
-        console.log('Admin: Viewer disconnected:', viewerId);
         const pc = peerConnectionsRef.current.get(viewerId);
         if (pc) {
             if (pc.signalingState !== 'closed') pc.close();
             peerConnectionsRef.current.delete(viewerId);
             setViewerCount(peerConnectionsRef.current.size);
-            console.log('Admin: Closed peer connection for viewer:', viewerId);
         }
-        toast({ title: t('adminLivestream.toast.viewerLeftTitle'), description: t('adminLivestream.toast.viewerLeftDescription', {  viewerId: viewerId as string }) });
     });
 
     newSocket.on('disconnect', () => {
-        console.log('Admin disconnected from Socket.IO server. Cleaning up.');
         peerConnectionsRef.current.forEach(pc => { if (pc.signalingState !== 'closed') pc.close(); });
         peerConnectionsRef.current.clear();
         setViewerCount(0);
-        toast({ title: t('adminLivestream.toast.socketDisconnectedTitle'), description: t('adminLivestream.toast.socketDisconnectedStreamInterrupt'), variant: 'destructive' });
     });
 
-
     return () => {
-      console.log('Admin cleaning up effect: stopping tracks (if any), closing PCs, disconnecting socket.');
       localStream?.getTracks().forEach(track => track.stop());
       peerConnectionsRef.current.forEach(pc => { if (pc.signalingState !== 'closed') pc.close();});
       peerConnectionsRef.current.clear();
@@ -178,7 +160,13 @@ export default function LiveStreamAdminPage() {
       setSocket(null);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localStream, isStreaming, toast, t]); // currentLiveStreamTitle removed from deps to avoid re-registering broadcaster on every title char change
+  }, [localStream, isStreaming, toast, t, currentLiveStreamTitle]);
+
+  useEffect(() => {
+    if (localVideoRef.current) {
+      localVideoRef.current.muted = isLocalPreviewMuted;
+    }
+  }, [isLocalPreviewMuted]);
 
   const getCameraPermission = async () => {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -187,6 +175,7 @@ export default function LiveStreamAdminPage() {
         setHasCameraPermission(true);
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
+          localVideoRef.current.muted = isLocalPreviewMuted;
         }
         setLocalStream(stream); 
         return stream;
@@ -214,9 +203,10 @@ export default function LiveStreamAdminPage() {
     }
 
     if (isStreaming) { 
-      console.log('Admin: Stopping stream...');
       if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+        localStream.getTracks().forEach(track => {
+            track.stop();
+        });
       }
       setLocalStream(null); 
       
@@ -229,15 +219,15 @@ export default function LiveStreamAdminPage() {
       if (localVideoRef.current) localVideoRef.current.srcObject = null;
       setIsStreaming(false);
       setHasCameraPermission(null); 
+      setIsMicrophoneMuted(false); 
       toast({ title: t('adminLivestream.toast.streamStoppedTitle'), description: t('adminLivestream.toast.streamStoppedDescription') });
     } else { 
-      console.log('Admin: Attempting to start stream...');
       const stream = await getCameraPermission(); 
       if (stream) {
+        stream.getAudioTracks().forEach(track => track.enabled = !isMicrophoneMuted);
+        
         if (socket && socket.connected) {
             socket.emit('register-broadcaster', { streamTitle: currentLiveStreamTitle });
-        } else {
-            console.log("Socket not yet connected, registration will occur on connect event if localStream is set.");
         }
         setIsStreaming(true); 
         toast({ title: t('adminLivestream.toast.streamStartingTitle'), description: t('adminLivestream.toast.streamStartingDescription') });
@@ -247,7 +237,6 @@ export default function LiveStreamAdminPage() {
     }
   };
   
-  // Called when the currentLiveStreamTitle input changes
   const handleLiveTitleChange = (newTitle: string) => {
     setCurrentLiveStreamTitle(newTitle);
     if (socket && socket.connected && isStreaming) {
@@ -269,20 +258,41 @@ export default function LiveStreamAdminPage() {
         description: t('adminLivestream.toast.persistentSettingsSavedDescription'),
       });
       await refreshSiteSettings();
-       // If live, also update the current live title if it was changed in the "default" field
       if (isStreaming && socket && socket.connected && currentLiveStreamTitle !== localDefaultStreamTitle) {
-         setCurrentLiveStreamTitle(localDefaultStreamTitle); // Sync current live title with new default
+         setCurrentLiveStreamTitle(localDefaultStreamTitle); 
          socket.emit('update-stream-title', { streamTitle: localDefaultStreamTitle });
       }
-
     } else {
       toast({ title: t('adminLivestream.toast.errorTitle'), description: result.message || t('adminLivestream.toast.genericError'), variant: "destructive" });
     }
     setIsSubmitting(false);
   };
 
+  const toggleMicrophone = () => {
+    if (localStream) {
+      const audioTracks = localStream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        audioTracks[0].enabled = !audioTracks[0].enabled;
+        setIsMicrophoneMuted(!audioTracks[0].enabled);
+        toast({ title: t('adminLivestream.toast.microphoneStatusTitle'), description: audioTracks[0].enabled ? t('adminLivestream.toast.microphoneUnmuted') : t('adminLivestream.toast.microphoneMuted') });
+      }
+    }
+  };
+
+  const toggleLocalPreviewAudio = () => {
+    if (localVideoRef.current) {
+      const newMutedState = !localVideoRef.current.muted;
+      localVideoRef.current.muted = newMutedState;
+      setIsLocalPreviewMuted(newMutedState);
+      toast({ 
+        title: t('adminLivestream.toast.localAudioStatusTitle'), 
+        description: newMutedState ? t('adminLivestream.toast.localAudioMuted') : t('adminLivestream.toast.localAudioUnmuted')
+      });
+    }
+  };
+
   if (isLoadingSettings) {
-    return <div className="flex justify-center items-center h-64"><Radio className="mr-3 h-8 w-8 animate-pulse text-primary" /></div>;
+    return <div className="flex justify-center items-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
   return (
@@ -299,106 +309,109 @@ export default function LiveStreamAdminPage() {
           <CardDescription>{t('adminLivestream.configCard.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center space-x-4 p-4 border rounded-lg bg-card">
-            <Label htmlFor="live-status-toggle" className="text-lg font-medium">
-              {t('adminLivestream.configCard.statusLabel')}:
-            </Label>
-            <div className="flex items-center space-x-2">
+          {/* Video Player and Overlays Section */}
+          <div className="relative bg-background/50 p-2 sm:p-4 rounded-lg border border-border shadow-inner">
+            <video ref={localVideoRef} className="w-full aspect-video rounded-md bg-black" autoPlay playsInline muted />
+            
+            {/* Viewer Count Overlay */}
+            <div className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-black/50 text-white px-2 py-1 rounded-md text-xs sm:text-sm flex items-center">
+              <Users className="h-4 w-4 mr-1.5" />
+              {t('adminLivestream.statsCard.viewersLabel')}: {viewerCount}
+            </div>
+
+            {/* Live Status Switch Overlay */}
+            <div className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-black/50 p-1.5 sm:p-2 rounded-md flex items-center space-x-2">
               <Switch
-                id="live-status-toggle"
+                id="live-status-toggle-overlay"
                 checked={isStreaming}
                 onCheckedChange={handleToggleStreaming}
                 aria-label={t('adminLivestream.configCard.toggleStreamAriaLabel')}
               />
-              <span className={`font-semibold ${isStreaming ? 'text-green-500' : 'text-red-500'}`}>
+              <span className={cn("text-xs sm:text-sm font-semibold", isStreaming ? 'text-red-400' : 'text-gray-400')}>
                 {isStreaming ? `● ${t('adminLivestream.configCard.statusLive')}` : t('adminLivestream.configCard.statusOffline')}
               </span>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="current-live-stream-title" className="text-base font-medium">{t('adminLivestream.configCard.currentLiveTitleLabel')}</Label>
-            <Input
-              id="current-live-stream-title"
-              placeholder={t('adminLivestream.configCard.titlePlaceholder')}
-              value={currentLiveStreamTitle}
-              onChange={(e) => handleLiveTitleChange(e.target.value)}
-              className="text-base"
-            />
-             <p className="text-xs text-muted-foreground">{t('adminLivestream.configCard.currentLiveTitleHelpText')}</p>
-          </div>
+            {(!isStreaming || !localStream) && hasCameraPermission !== false && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 rounded-md pointer-events-none">
+                  <VideoIcon className="h-12 w-12 text-muted-foreground/50 mb-2" />
+                  <p className="text-md text-muted-foreground text-center px-4">
+                     {t('adminLivestream.configCard.cameraNotDetectedAlert.description')}
+                  </p>
+                </div>
+            )}
 
-          <div className="space-y-2">
-            <Label htmlFor="default-stream-title" className="text-base font-medium">{t('adminLivestream.configCard.defaultTitleLabel')}</Label>
-            <Input
-              id="default-stream-title"
-              placeholder={t('adminLivestream.configCard.defaultTitlePlaceholder')}
-              value={localDefaultStreamTitle}
-              onChange={(e) => setLocalDefaultStreamTitle(e.target.value)}
-              className="text-base"
-            />
-            <p className="text-xs text-muted-foreground">{t('adminLivestream.configCard.defaultTitleHelpText')}</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="offline-message" className="text-base font-medium">{t('adminLivestream.configCard.offlineMessageLabel')}</Label>
-            <Textarea
-              id="offline-message"
-              placeholder={t('adminLivestream.configCard.offlineMessagePlaceholder')}
-              value={localOfflineMessage}
-              onChange={(e) => setLocalOfflineMessage(e.target.value)}
-              className="text-base"
-              rows={3}
-            />
-            <p className="text-xs text-muted-foreground">{t('adminLivestream.configCard.offlineMessageHelpText')}</p>
-          </div>
-
-
-          {hasCameraPermission === false && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>{t('adminLivestream.configCard.cameraPermissionDeniedAlert.title')}</AlertTitle>
-              <AlertDescription>
-                {t('adminLivestream.configCard.cameraPermissionDeniedAlert.description')}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <Card className="bg-card/50">
-            <CardHeader>
-              <CardTitle className="font-headline text-xl flex items-center"><VideoIcon className="mr-2 h-5 w-5" />{t('adminLivestream.configCard.cameraPreviewTitle')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <video ref={localVideoRef} className="w-full aspect-video rounded-md bg-black" autoPlay muted playsInline />
-              {!isStreaming && hasCameraPermission !== false && (
-                 <Alert variant="default" className="mt-4">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>{t('adminLivestream.configCard.cameraNotDetectedAlert.title')}</AlertTitle>
-                    <AlertDescription>
-                        {t('adminLivestream.configCard.cameraNotDetectedAlert.description')}
-                    </AlertDescription>
+            {isStreaming && localStream && (
+              <div className="mt-3 flex items-center justify-center space-x-2 sm:space-x-3">
+                <Button onClick={toggleMicrophone} variant="outline" size="sm" className="bg-card/80 hover:bg-card">
+                  {isMicrophoneMuted ? <MicOff className="mr-1.5 h-4 w-4" /> : <Mic className="mr-1.5 h-4 w-4" />}
+                  {isMicrophoneMuted ? t('adminLivestream.configCard.unmuteMicButton') : t('adminLivestream.configCard.muteMicButton')}
+                </Button>
+                <Button onClick={toggleLocalPreviewAudio} variant="outline" size="sm" className="bg-card/80 hover:bg-card">
+                  {isLocalPreviewMuted ? <VolumeX className="mr-1.5 h-4 w-4" /> : <Volume2 className="mr-1.5 h-4 w-4" />}
+                  {isLocalPreviewMuted ? t('adminLivestream.configCard.unmuteLocalAudioButton') : t('adminLivestream.configCard.muteLocalAudioButton')}
+                </Button>
+              </div>
+            )}
+             {hasCameraPermission === false && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>{t('adminLivestream.configCard.cameraPermissionDeniedAlert.title')}</AlertTitle>
+                  <AlertDescription>
+                    {t('adminLivestream.configCard.cameraPermissionDeniedAlert.description')}
+                  </AlertDescription>
                 </Alert>
               )}
-            </CardContent>
-          </Card>
+          </div>
+          
+          {/* Configuration Inputs Section */}
+          <div className="space-y-4 pt-4">
+            <div className="space-y-1">
+              <Label htmlFor="current-live-stream-title" className="text-sm font-medium">{t('adminLivestream.configCard.currentLiveTitleLabel')}</Label>
+              <Input
+                id="current-live-stream-title"
+                placeholder={t('adminLivestream.configCard.titlePlaceholder')}
+                value={currentLiveStreamTitle}
+                onChange={(e) => handleLiveTitleChange(e.target.value)}
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground">{t('adminLivestream.configCard.currentLiveTitleHelpText')}</p>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="default-stream-title" className="text-sm font-medium">{t('adminLivestream.configCard.defaultTitleLabel')}</Label>
+              <Input
+                id="default-stream-title"
+                placeholder={t('adminLivestream.configCard.defaultTitlePlaceholder')}
+                value={localDefaultStreamTitle}
+                onChange={(e) => setLocalDefaultStreamTitle(e.target.value)}
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground">{t('adminLivestream.configCard.defaultTitleHelpText')}</p>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="offline-message" className="text-sm font-medium">{t('adminLivestream.configCard.offlineMessageLabel')}</Label>
+              <Textarea
+                id="offline-message"
+                placeholder={t('adminLivestream.configCard.offlineMessagePlaceholder')}
+                value={localOfflineMessage}
+                onChange={(e) => setLocalOfflineMessage(e.target.value)}
+                className="text-sm"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">{t('adminLivestream.configCard.offlineMessageHelpText')}</p>
+            </div>
+          </div>
         </CardContent>
-        <CardFooter className="flex justify-end">
+        <CardFooter className="border-t pt-6 flex justify-end">
           <Button onClick={handleSaveChanges} disabled={isSubmitting}>
-            {isSubmitting && <Save className="mr-2 h-4 w-4 animate-spin" />}
-            <Save className="mr-2 h-4 w-4" /> {t('adminLivestream.configCard.saveSettingsButton')}
+            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            {t('adminLivestream.configCard.saveSettingsButton')}
           </Button>
         </CardFooter>
-      </Card>
-
-      <Card className="shadow-lg border-primary/10">
-        <CardHeader>
-            <CardTitle className="font-headline text-xl">{t('adminLivestream.statsCard.title')}</CardTitle>
-            <CardDescription>{t('adminLivestream.statsCard.description')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <p className="text-lg">{t('adminLivestream.statsCard.viewersLabel')}: <span className="font-bold text-primary">{viewerCount}</span></p>
-        </CardContent>
       </Card>
     </div>
   );
 }
+    

@@ -34,8 +34,16 @@ export default function AnnouncementModal({ isOpen, onOpenChange, announcement }
 
   const youtubeEmbedUrl = announcement.videoUrl ? getYoutubeEmbedUrl(announcement.videoUrl) : null;
 
+  const handleOpenChangeWithPersistence = (open: boolean) => {
+    onOpenChange(open);
+    if (!open && announcement?.showOnce && announcement.id && typeof window !== 'undefined') {
+      localStorage.setItem(`announcement_viewed_${announcement.id}`, 'true');
+    }
+  };
+
+
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChangeWithPersistence}>
       <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl w-[90vw] bg-card border-primary/30 shadow-xl p-0 max-h-[90vh] flex flex-col">
         <DialogHeader className="p-6 pb-4 border-b border-border flex flex-row items-center justify-between">
           <div className="flex items-center">

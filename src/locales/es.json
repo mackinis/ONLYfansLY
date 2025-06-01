@@ -10,6 +10,7 @@
     "register": "Registrarse",
     "adminPanel": "Panel de Admin",
     "languageSelectorTooltip": "Seleccionar Idioma",
+    "currencySelectorTooltip": "Seleccionar Moneda",
     "english": "Inglés",
     "spanish": "Español",
     "mobileMenuButton": "Abrir menú",
@@ -54,6 +55,7 @@
     "submitting": "Enviando...",
     "loginToSubmit": "Debes iniciar sesión para enviar un testimonio.",
     "loadingUser": "Cargando información del usuario...",
+    "mediaSubmissionDisabled": "El envío de multimedia (fotos/videos) está actualmente deshabilitado para los testimonios.",
     "toast": {
       "successTitle": "¡Testimonio Enviado!",
       "successDescription": "Gracias por tus comentarios. Serán revisados en breve.",
@@ -145,10 +147,10 @@
       "totalCourses": "Cursos Totales",
       "pendingTestimonials": "Testimonios Pendientes",
       "activeUsers": "Usuarios Activos",
-      "siteActivity": "Actividad del Sitio",
-      "siteActivityHigh": "Alta"
+      "totalUsers": "Usuarios Totales"
     },
     "viewDetailsLink": "Ver Detalles",
+    "loadingData": "Cargando datos...",
     "recentActivity": {
       "title": "Actividad Reciente",
       "description": "Últimas actualizaciones y acciones en la plataforma.",
@@ -207,7 +209,11 @@
         "title": "Cámara No Detectada o Vista Previa Apagada",
         "description": "Si deseas transmitir, asegúrate de que tu cámara esté conectada y activa la transmisión. La vista previa aparecerá aquí cuando la transmisión esté activa."
       },
-      "saveSettingsButton": "Guardar Configuraciones Persistentes"
+      "saveSettingsButton": "Guardar Configuraciones Persistentes",
+      "muteMicButton": "Silenciar Mic",
+      "unmuteMicButton": "Activar Mic",
+      "muteLocalAudioButton": "Silenciar Vista Previa",
+      "unmuteLocalAudioButton": "Activar Sonido Vista Previa"
     },
     "statsCard": {
       "title": "Estadísticas de Transmisión",
@@ -240,7 +246,13 @@
       "streamStartingTitle": "Iniciando Transmisión",
       "streamStartingDescription": "La transmisión en vivo está comenzando...",
       "settingsSavedTitle": "Configuración Guardada",
-      "persistentSettingsSavedDescription": "El título de transmisión predeterminado y el mensaje sin conexión se han guardado en la configuración global del sitio."
+      "persistentSettingsSavedDescription": "El título de transmisión predeterminado y el mensaje sin conexión se han guardado en la configuración global del sitio.",
+      "microphoneStatusTitle": "Estado del Micrófono",
+      "microphoneMuted": "Micrófono silenciado para los espectadores.",
+      "microphoneUnmuted": "Micrófono activado para los espectadores.",
+      "localAudioStatusTitle": "Audio de Vista Previa Local",
+      "localAudioMuted": "Audio de vista previa local silenciado.",
+      "localAudioUnmuted": "Audio de vista previa local activado."
     }
   },
   "adminCoursesPage": {
@@ -273,6 +285,8 @@
       "videoUrl": "URL del Video",
       "videoUrlDescription": "Enlace directo al archivo de video (ej: .mp4) o URL de YouTube. Los enlaces de YouTube se incrustarán. Los enlaces directos pueden tener problemas de CORS.",
       "priceArs": "Precio (ARS)",
+      "discountInput": "Descuento (Opcional)",
+      "discountInputDescription": "Ingresa un porcentaje (ej: '10%') para descuento, o un precio final fijo (ej: '89990'). Deja vacío para no aplicar descuento.",
       "duration": "Duración",
       "optional": "Opcional",
       "cancel": "Cancelar",
@@ -420,10 +434,11 @@
   "adminCurrenciesPage": {
     "title": "Gestión de Monedas",
     "cardTitle": "Configuración de Monedas y Tipos de Cambio",
-    "cardDescriptionArsBase": "ARS (Peso Argentino) es la moneda base. Ingresa cuántos ARS equivalen a 1 USD y 1 EUR.",
-    "exchangeRatesTitle": "Tipos de Cambio (vs ARS)",
-    "usdToArsRateLabel": "1 USD = X ARS",
-    "eurToArsRateLabel": "1 EUR = Y ARS",
+    "cardDescriptionFlexiblePrimary": "Selecciona monedas activas y una moneda principal. Todos los precios se almacenan en ARS; los tipos de cambio se utilizan para la visualización en otras monedas. Las tasas siempre se ingresan en relación con ARS.",
+    "exchangeRatesTitle": "Tipos de Cambio (Relativos a ARS)",
+    "exchangeRateHelpText": "Ingresa cuántos ARS equivalen a 1 unidad de USD y 1 unidad de EUR respectivamente. Estas tasas se utilizan para convertir los precios en ARS para su visualización.",
+    "usdToArsRateLabel": "Tasa de 1 USD a ARS",
+    "eurToArsRateLabel": "Tasa de 1 EUR a ARS",
     "activeCurrenciesTitle": "Monedas de Visualización Activas",
     "primaryBadge": "Principal",
     "statusActive": "Activa",
@@ -436,22 +451,21 @@
     "toasts": {
       "errorTitle": "Error",
       "atLeastOneActiveError": "Al menos una moneda debe estar activa.",
-      "cannotDeactivatePrimaryError": "No se puede desactivar la moneda principal. ARS debe permanecer activa y principal.",
+      "cannotDeactivatePrimaryError": "No se puede desactivar la moneda principal. Establece otra moneda como principal primero.",
+      "mustBeActiveToSetPrimaryError": "Una moneda debe estar activa para ser establecida como principal.",
       "selectPrimaryError": "Se debe seleccionar una moneda principal de entre las activas.",
-      "primaryMustBeArsError": "Para este sistema, ARS debe establecerse como la moneda principal para utilizar correctamente los tipos de cambio USD/EUR a ARS.",
-      "ratesMustBePositiveError": "Los tipos de cambio USD a ARS y EUR a ARS deben ser números positivos.",
+      "ratesMustBePositiveError": "Los tipos de cambio deben ser números positivos.",
       "settingsSavedTitle": "Configuración Guardada",
       "settingsSavedUpdatedDescription": "Las preferencias de visualización de monedas y los tipos de cambio han sido actualizados.",
-      "genericErrorDescription": "Ocurrió un error inesperado al guardar la configuración de monedas.",
-      "noActivePrimaryWarning": "No hay una moneda principal activa. Por favor, activa y establece ARS como principal."
+      "genericErrorDescription": "Ocurrió un error inesperado al guardar la configuración de monedas."
     }
   },
   "adminAppearancePage": {
     "title": "Apariencia del Sitio Web",
     "cardTitle": "Personalización del Esquema de Colores",
-    "cardDescription": "Ajusta los colores principales de tu sitio web. Los cambios se aplicarán en todo el sitio. Ingresa valores HSL (ej: \"0 0% 10%\") para las entradas de texto.",
-    "hslPlaceholder": "Valor HSL (ej: 45 69% 52%)",
-    "hslHelpText": "Ingresa valor HSL (ej: 45 69% 52%)",
+    "cardDescription": "Ajusta los colores principales de tu sitio web usando valores HEX (ej: #RRGGBB). Los cambios se aplicarán en todo el sitio.",
+    "hexPlaceholder": "Valor HEX (ej: #D4AF37)",
+    "hexHelpText": "Ingresa un valor de color HEX de 6 dígitos (ej: #D4AF37).",
     "resetButton": "Restablecer a Predeterminados",
     "saveButton": "Guardar y Aplicar Cambios",
     "livePreview": {
@@ -470,14 +484,25 @@
       "resetDescription": "Los colores del sitio web han sido restablecidos a los predeterminados."
     },
     "colorLabels": {
-      "primary": "Color Primario",
+      "background": "Fondo",
+      "foreground": "Texto de Primer Plano",
+      "primary": "Primario",
       "primary_foreground": "Texto Primario",
-      "background": "Color de Fondo",
-      "foreground": "Color de Texto Principal",
       "card": "Fondo de Tarjeta",
-      "accent": "Color de Acento (Elementos UI)",
-      "button_default_bg": "Fondo Botón Predeterm. (Primario)",
-      "button_default_text": "Texto Botón Predeterm. (Primer Plano Primario)"
+      "card_foreground": "Texto de Tarjeta",
+      "popover": "Fondo de Popover",
+      "popover_foreground": "Texto de Popover",
+      "secondary": "Secundario",
+      "secondary_foreground": "Texto Secundario",
+      "muted": "Fondo Atenuado",
+      "muted_foreground": "Texto Atenuado",
+      "accent": "Fondo de Acento",
+      "accent_foreground": "Texto de Acento",
+      "destructive": "Acción Destructiva",
+      "destructive_foreground": "Texto Destructivo",
+      "border": "Bordes",
+      "input": "Fondo/Borde de Input",
+      "ring": "Anillo de Enfoque"
     }
   },
   "videoCard": {
@@ -556,8 +581,10 @@
     "form": {
       "siteTitle": "Título del Sitio",
       "siteTitleDescription": "El nombre de tu sitio web, mostrado en las pestañas del navegador y encabezados.",
-      "siteIconUrl": "URL del Ícono del Sitio (Favicon)",
-      "siteIconUrlDescription": "URL para el ícono de tu sitio (ej: .png, .ico, .svg). Se muestra en las pestañas del navegador.",
+      "siteIconUrl": "URL del Ícono del Sitio (Favicon/General)",
+      "siteIconUrlDescription": "URL para el ícono general de tu sitio (ej: .png, .ico, .svg). Usado para las pestañas del navegador (favicon) y como fallback.",
+      "headerIconUrl": "URL del Ícono/Logo del Encabezado (Opcional)",
+      "headerIconUrlDescription": "URL específica para el ícono/logo mostrado en el encabezado del sitio. Si está vacío, usa la URL del Ícono del Sitio.",
       "fileUploadNote": "Nota: La subida directa de archivos para íconos aún no está soportada. Por favor, proporciona una URL a un ícono alojado externamente.",
       "heroTitle": "Título del Banner Principal (Homepage)",
       "heroTitlePlaceholder": "Ej: Bienvenidos a Nuestra Plataforma",
@@ -580,7 +607,22 @@
       "enableAICuration": "Habilitar Curación por IA para Testimonios",
       "enableAICurationDescription": "Si está deshabilitado, se mostrarán los testimonios aprobados más recientes.",
       "minTestimonialsForAICuration": "Mínimo de Testimonios Aprobados para Curación por IA",
-      "minTestimonialsForAICurationDescription": "La curación por IA solo se ejecutará si hay al menos esta cantidad de testimonios aprobados. Predeterminado: 5."
+      "minTestimonialsForAICurationDescription": "La curación por IA solo se ejecutará si hay al menos esta cantidad de testimonios aprobados. Predeterminado: 5.",
+      "headerDisplayModeTitle": "Modo de Visualización del Encabezado",
+      "headerDisplayModeDescription": "Elige cómo se muestran el logo y el título del sitio en el encabezado.",
+      "footerDisplayModeTitle": "Modo de Visualización del Pie de Página",
+      "footerDisplayModeDescription": "Elige cómo se muestran el logo y el título del sitio en el pie de página.",
+      "displayModeLogoOnly": "Solo Logo",
+      "displayModeTitleOnly": "Solo Título",
+      "displayModeBoth": "Logo y Título",
+      "footerLogoSize": "Tamaño del Logo del Pie de Página (px)",
+      "footerLogoSizeDescription": "Establece el tamaño del logo en el pie de página en píxeles (ej: 64). Predeterminado: 64px.",
+      "testimonialMediaOptionsTitle": "Adjuntos Multimedia en Testimonios",
+      "testimonialMediaOptionsDescription": "Controla qué tipo de multimedia pueden enviar los usuarios con sus testimonios.",
+      "mediaOptionNone": "Ninguno (Solo texto)",
+      "mediaOptionPhotos": "Solo Fotos",
+      "mediaOptionVideos": "Solo Videos",
+      "mediaOptionBoth": "Fotos y Videos"
     },
     "saveButton": "Guardar Configuración",
     "toasts": {
@@ -749,6 +791,7 @@
       "contentType": "Tipo de Contenido",
       "status": "Estado",
       "expiryDate": "Fecha de Caducidad",
+      "showOnce": "Mostrar una vez",
       "actions": "Acciones"
     },
     "status": {
@@ -779,6 +822,8 @@
       "expiryDatePlaceholder": "Selecciona fecha de caducidad",
       "isActive": "Activo",
       "isActiveDescription": "Si está activo, este anuncio podrá mostrarse en la página de inicio.",
+      "showOnce": "Mostrar Solo Una Vez por Usuario",
+      "showOnceDescription": "Si está activo, el anuncio se mostrará una sola vez a cada usuario (basado en navegador).",
       "cancel": "Cancelar",
       "createAnnouncement": "Crear Anuncio",
       "saveChanges": "Guardar Cambios"
@@ -852,6 +897,147 @@
       "updateSuccessDescription": "La configuración del chat de WhatsApp ha sido guardada.",
       "updateErrorTitle": "Actualización Fallida"
     }
+  },
+  "maintenancePage": {
+    "title": "Sitio en Mantenimiento",
+    "message": "Estamos realizando algunas mejoras en nuestro sitio. Estaremos de vuelta pronto. ¡Gracias por tu paciencia!",
+    "adminAccess": "Si eres administrador, puedes",
+    "loginLink": "iniciar sesión aquí"
+  },
+  "aboutPage": {
+    "mainTitle": "Sobre {siteTitle}",
+    "welcome": {
+      "title": "Bienvenido a {siteTitle}",
+      "paragraph1": "En {siteTitle}, creemos en el poder de las historias visuales para inspirar, educar y entretener. Nuestra plataforma está dedicada a ofrecer una colección curada de contenido de video premium de todo el mundo, abarcando una amplia gama de géneros e intereses.",
+      "paragraph2": "Fundada con la pasión por el contenido de calidad y una experiencia de usuario fluida, nuestro objetivo es ser tu destino preferido para el descubrimiento de videos y el aprendizaje."
+    },
+    "mission": {
+      "title": "Nuestra Misión",
+      "text": "Nuestra misión es conectar a los espectadores con contenido de video extraordinario que enriquezca sus vidas, fomente la creatividad y provoque conversaciones significativas. Nos esforzamos por apoyar a los creadores y ofrecer una plataforma donde el arte y la narrativa prosperen."
+    },
+    "vision": {
+      "title": "Nuestra Visión",
+      "text": "Nuestra visión es convertirnos en una comunidad global líder para entusiastas del video, reconocida por nuestra diversa biblioteca, características innovadoras y compromiso con la excelencia. Aspiramos a redefinir la forma en que las personas experimentan y se relacionan con el contenido de video."
+    },
+    "whatWeOffer": {
+      "title": "Qué Ofrecemos",
+      "text": "Ofrecemos una amplia gama de cursos en video, transmisiones en vivo y contenido curado diseñado para todos los niveles de habilidad e intereses. Desde tutoriales detallados hasta inspiradoras historias, hay algo para todos en {siteTitle}."
+    },
+    "team": {
+      "title": "Nuestro Equipo",
+      "paragraph1": "Detrás de {siteTitle} hay un equipo de desarrolladores apasionados, curadores de contenido y entusiastas de la tecnología dedicados a construir la mejor experiencia de video posible. Somos un grupo diverso, unido por nuestro amor por la narración visual y la innovación.",
+      "paragraph2": "Creemos en la colaboración, la creatividad y el aprendizaje continuo. ¡Gracias por ser parte de la comunidad de {siteTitle}!"
+    }
+  },
+  "privacyPage": {
+    "mainTitle": "Política de Privacidad",
+    "lastUpdated": "Última actualización: {date}. Esta Política de Privacidad describe nuestras políticas sobre la recopilación, uso y divulgación de su información cuando utiliza el servicio de {siteTitle} y le informa sobre sus derechos de privacidad y cómo la ley lo protege.",
+    "introduction": {
+      "title": "Introducción",
+      "paragraph1": "Bienvenido a {siteTitle}. Valoramos su privacidad y estamos comprometidos a proteger su información personal. Esta Política de Privacidad explica cómo recopilamos, usamos, compartimos y protegemos su información cuando visita nuestro sitio web o utiliza nuestros servicios.",
+      "paragraph2": "Al utilizar nuestro sitio web, usted acepta la recopilación y el uso de información de acuerdo con esta política."
+    },
+    "informationCollection": {
+      "title": "Información que Recopilamos",
+      "paragraph1": "Recopilamos varios tipos de información para diversos propósitos para proporcionar y mejorar nuestro servicio para usted:",
+      "item1": "Información de Identificación Personal (por ejemplo, nombre, dirección de correo electrónico, número de teléfono) que usted proporciona voluntariamente.",
+      "item2": "Información de Uso (por ejemplo, dirección IP, tipo de navegador, páginas visitadas, tiempo de visita).",
+      "item3": "Información de Cookies y Tecnologías de Seguimiento Similares.",
+      "item4": "Contenido generado por el usuario, como testimonios o comentarios."
+    },
+    "useOfInformation": {
+      "title": "Cómo Usamos Su Información",
+      "paragraph1": "Utilizamos la información que recopilamos para:",
+      "item1": "Proporcionar, operar y mantener nuestro sitio web y servicios.",
+      "item2": "Mejorar, personalizar y expandir nuestro sitio web y servicios.",
+      "item3": "Comprender y analizar cómo utiliza nuestro sitio web.",
+      "item4": "Desarrollar nuevos productos, servicios, características y funcionalidades."
+    },
+    "informationSharing": {
+      "title": "Cómo Compartimos Su Información",
+      "paragraph1": "No vendemos su información personal. Podemos compartir su información en las siguientes situaciones:",
+      "item1": "Con proveedores de servicios para realizar servicios en nuestro nombre.",
+      "item2": "Para cumplir con obligaciones legales.",
+      "item3": "Para proteger y defender nuestros derechos o propiedad.",
+      "paragraph2": "También podemos compartir información anónima o agregada que no lo identifique directamente."
+    },
+    "dataSecurity": {
+      "title": "Seguridad de los Datos",
+      "paragraph1": "La seguridad de sus datos es importante para nosotros, pero recuerde que ningún método de transmisión por Internet o método de almacenamiento electrónico es 100% seguro. Si bien nos esforzamos por utilizar medios comercialmente aceptables para proteger su información personal, no podemos garantizar su seguridad absoluta."
+    },
+    "cookies": {
+      "title": "Cookies y Tecnologías de Seguimiento",
+      "paragraph1": "{siteTitle} utiliza cookies y tecnologías de seguimiento similares para rastrear la actividad en nuestro servicio y mantener cierta información. Puede instruir a su navegador para que rechace todas las cookies o para que indique cuándo se envía una cookie. Sin embargo, si no acepta las cookies, es posible que no pueda utilizar algunas partes de nuestro servicio."
+    },
+    "yourRights": {
+      "title": "Sus Derechos de Protección de Datos",
+      "paragraph1": "Dependiendo de su ubicación, puede tener ciertos derechos con respecto a su información personal, como el derecho a acceder, corregir, eliminar o restringir el uso de sus datos personales."
+    },
+    "childrensPrivacy": {
+      "title": "Privacidad de los Niños",
+      "paragraph1": "Nuestro servicio no se dirige a ninguna persona menor de 13 años. No recopilamos conscientemente información de identificación personal de niños menores de 13 años. Si usted es un padre o tutor y sabe que su hijo nos ha proporcionado información personal, contáctenos."
+    },
+    "changesToPolicy": {
+      "title": "Cambios a Esta Política de Privacidad",
+      "paragraph1": "Podemos actualizar nuestra Política de Privacidad de vez en cuando. Le notificaremos cualquier cambio publicando la nueva Política de Privacidad en esta página y actualizando la fecha de \"última actualización\"."
+    },
+    "contactUs": {
+      "title": "Contáctenos",
+      "paragraph1": "Si tiene alguna pregunta sobre esta Política de Privacidad, puede contactarnos en: {email}"
+    }
+  },
+  "termsPage": {
+    "mainTitle": "Términos de Servicio",
+    "lastUpdated": "Última actualización: {date}. Lea atentamente estos Términos de Servicio antes de utilizar el servicio de {siteTitle}.",
+    "introduction": {
+      "title": "Introducción",
+      "paragraph1": "Bienvenido a {siteTitle} (\"Compañía\", \"nosotros\", \"nuestro\" o \"nos\"). Estos Términos de Servicio (\"Términos\") rigen su uso de nuestro sitio web y los servicios que ofrecemos (colectivamente, el \"Servicio\").",
+      "paragraph2": "Al acceder o utilizar el Servicio, usted acepta estar sujeto a estos Términos. Si no está de acuerdo con alguna parte de los términos, no podrá acceder al Servicio."
+    },
+    "userAccounts": {
+      "title": "Cuentas de Usuario",
+      "paragraph1": "Cuando crea una cuenta con nosotros, debe proporcionarnos información precisa, completa y actual en todo momento. El incumplimiento de esto constituye una violación de los Términos, lo que puede resultar en la terminación inmediata de su cuenta en nuestro Servicio.",
+      "paragraph2": "Usted es responsable de salvaguardar la contraseña que utiliza para acceder al Servicio y de cualquier actividad o acción bajo su contraseña."
+    },
+    "content": {
+      "title": "Contenido",
+      "paragraph1": "Nuestro Servicio le permite publicar, vincular, almacenar, compartir y poner a disposición cierta información, texto, gráficos, videos u otro material (\"Contenido\"). Usted es responsable del Contenido que publica en el Servicio, incluida su legalidad, confiabilidad y adecuación.",
+      "paragraph2": "Al publicar Contenido en el Servicio, nos otorga el derecho y la licencia para usar, modificar, ejecutar públicamente, mostrar públicamente, reproducir y distribuir dicho Contenido en ya través del Servicio. Usted conserva todos sus derechos sobre cualquier Contenido que envíe, publique o muestre en oa través del Servicio y es responsable de proteger esos derechos. {siteTitle} no tomará ninguna responsabilidad y no asumirá ninguna responsabilidad por el Contenido que usted o cualquier tercero publique en oa través del Servicio."
+    },
+    "userConduct": {
+      "title": "Conducta del Usuario",
+      "paragraph1": "Usted acepta no utilizar el Servicio para:",
+      "item1": "Cargar, publicar, enviar por correo electrónico, transmitir o poner a disposición cualquier Contenido que sea ilegal, dañino, amenazante, abusivo, acosador, tortuoso, difamatorio, vulgar, obsceno, calumnioso, invasivo de la privacidad de otra persona, odioso o racial, étnica o de otra manera objetable.",
+      "item2": "Hacerse pasar por cualquier persona o entidad, o declarar falsamente o tergiversar de otra manera su afiliación con una persona o entidad.",
+      "item3": "Cargar, publicar, enviar por correo electrónico, transmitir o poner a disposición cualquier Contenido que no tenga derecho a poner a disposición bajo ninguna ley o bajo relaciones contractuales o fiduciarias."
+    },
+    "intellectualProperty": {
+      "title": "Propiedad Intelectual",
+      "paragraph1": "El Servicio y su contenido original (excluyendo el Contenido proporcionado por los usuarios), características y funcionalidad son y seguirán siendo propiedad exclusiva de {siteTitle} y sus licenciantes. El Servicio está protegido por derechos de autor, marcas registradas y otras leyes tanto de su país como de países extranjeros."
+    },
+    "termination": {
+      "title": "Terminación",
+      "paragraph1": "Podemos rescindir o suspender su cuenta y prohibir el acceso al Servicio de inmediato, sin previo aviso ni responsabilidad, a nuestro exclusivo criterio, por cualquier motivo y sin limitación, incluido, entre otros, el incumplimiento de los Términos. Si desea cancelar su cuenta, simplemente puede dejar de usar el Servicio."
+    },
+    "disclaimers": {
+      "title": "Descargos de Responsabilidad",
+      "paragraph1": "Su uso del Servicio es bajo su único riesgo. El Servicio se proporciona \"TAL CUAL\" y \"SEGÚN DISPONIBILIDAD\". El Servicio se proporciona sin garantías de ningún tipo, ya sean expresas o implícitas, incluidas, entre otras, las garantías implícitas de comerciabilidad, idoneidad para un propósito particular, no infracción o curso de ejecución. {siteTitle} sus subsidiarias, afiliadas y sus licenciantes no garantizan que a) el Servicio funcionará ininterrumpidamente, seguro o disponible en cualquier momento o lugar en particular; b) se corregirán los errores o defectos; c) el Servicio está libre de virus u otros componentes dañinos; o d) los resultados del uso del Servicio cumplirán con sus requisitos."
+    },
+    "limitationOfLiability": {
+      "title": "Limitación de Responsabilidad",
+      "paragraph1": "En ningún caso {siteTitle}, ni sus directores, empleados, socios, agentes, proveedores o afiliados, serán responsables de ningún daño indirecto, incidental, especial, consecuente o punitivo, incluidos, entre otros, la pérdida de ganancias, datos, uso, buena voluntad u otras pérdidas intangibles, como resultado de (i) su acceso o uso o incapacidad para acceder o usar el Servicio; (ii) cualquier conducta o contenido de cualquier tercero en el Servicio; (iii) cualquier contenido obtenido del Servicio; y (iv) acceso no autorizado, uso o alteración de sus transmisiones o contenido, ya sea basado en garantía, contrato, agravio (incluida negligencia) o cualquier otra teoría legal, ya sea que hayamos sido informados o no de la posibilidad de dicho daño, e incluso si se determina que un remedio establecido en este documento ha fallado en su propósito esencial."
+    },
+    "governingLaw": {
+      "title": "Ley Aplicable",
+      "paragraph1": "Estos Términos se regirán e interpretarán de acuerdo con las leyes de nuestra jurisdicción, sin tener en cuenta sus disposiciones sobre conflicto de leyes."
+    },
+    "changesToTerms": {
+      "title": "Cambios a Estos Términos",
+      "paragraph1": "Nos reservamos el derecho, a nuestro exclusivo criterio, de modificar o reemplazar estos Términos en cualquier momento. Si una revisión es material, intentaremos proporcionar un aviso de al menos 30 días antes de que entren en vigencia los nuevos términos. Lo que constituye un cambio material se determinará a nuestro exclusivo criterio."
+    },
+    "contactUs": {
+      "title": "Contáctenos",
+      "paragraph1": "Si tiene alguna pregunta sobre estos Términos, contáctenos en: {email}"
+    }
   }
 }
-

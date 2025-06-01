@@ -6,6 +6,8 @@ export interface Video {
   previewImageUrl?: string;
   videoUrl: string;
   priceArs: number; // Price is always stored in ARS
+  discountInput?: string; // Stores "10%" or "79990"
+  finalPriceArs?: number; // Calculated price after discount
   duration?: string;
   order: number; // For manual ordering by admin
   views: number; // For automatic view count
@@ -83,37 +85,52 @@ export interface SocialLink {
   iconName?: string;
 }
 
+export type HeaderDisplayMode = 'logo' | 'title' | 'both';
+export type FooterDisplayMode = 'logo' | 'title' | 'both';
+
+export interface ColorSetting {
+  id: string;
+  labelKey: string;
+  cssVar: string;
+  defaultValueHex: string;
+  value: string; 
+}
+
+export type TestimonialMediaOption = 'none' | 'photos' | 'videos' | 'both';
+
 export interface SiteSettings {
   siteTitle: string;
-  siteIconUrl?: string;
+  siteIconUrl?: string; // General site icon / Favicon
+  headerIconUrl?: string; // Specific icon for the header
   maintenanceMode: boolean;
   defaultLanguage: 'en' | 'es';
   allowUserToChooseLanguage: boolean;
   allowUserToChooseCurrency: boolean;
   activeCurrencies: ActiveCurrencySetting[];
   exchangeRates: ExchangeRates;
+  themeColors: ColorSetting[];
   heroTitle: string;
   heroSubtitle: string;
   liveStreamDefaultTitle: string;
   liveStreamOfflineMessage: string;
   socialLinks: SocialLink[];
+  testimonialMediaOptions?: TestimonialMediaOption;
   updatedAt?: string;
-
-  // WhatsApp Settings
   whatsAppEnabled: boolean;
   whatsAppPhoneNumber: string;
   whatsAppDefaultMessage?: string;
-  whatsAppIcon: string; // 'default', 'customUrl', or lucide-react icon name (e.g., 'Paperclip')
+  whatsAppIcon: string; 
   whatsAppCustomIconUrl?: string;
-  whatsAppButtonSize: number; // size of the circular button, e.g., 56
-  whatsAppIconSize: number;   // size of the icon itself inside the button, e.g., 28
-
-  // AI Testimonial Curation Settings
+  whatsAppButtonSize: number; 
+  whatsAppIconSize: number;   
   aiCurationEnabled: boolean;
   aiCurationMinTestimonials: number;
+  headerDisplayMode: HeaderDisplayMode;
+  footerDisplayMode: FooterDisplayMode;
+  footerLogoSize?: number;
 }
 
-export interface ThemeColorSetting {
+export interface ThemeColorSetting { 
   id: string;
   label: string;
   cssVar: string;
@@ -127,7 +144,7 @@ export interface SessionUserProfile {
   surname: string;
   email: string;
   role: 'user' | 'admin';
-  avatarUrl?: string; // Add avatarUrl here too
+  avatarUrl?: string; 
 }
 
 export type AnnouncementContentType = 'image-only' | 'text-image' | 'text-video' | 'video-only';
@@ -139,9 +156,16 @@ export interface Announcement {
   text?: string;
   imageUrl?: string;
   videoUrl?: string;
-  expiryDate: string; // ISO string for Firestore, Date object on client
+  expiryDate: string; 
   isActive: boolean;
+  showOnce?: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface DashboardStats {
+  totalCourses: number;
+  pendingTestimonials: number;
+  activeUsers: number;
+  totalUsers: number;
+}

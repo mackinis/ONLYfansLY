@@ -8,7 +8,7 @@ import type { Video, SiteSettings, ActiveCurrencySetting, ExchangeRates, Announc
 import CuratedTestimonialsDisplay from '@/components/CuratedTestimonialsDisplay';
 import VideoPlayerModal from '@/components/VideoPlayerModal';
 import AnnouncementModal from '@/components/AnnouncementModal';
-import CourseDetailModal from '@/components/CourseDetailModal'; // Import CourseDetailModal
+import CourseDetailModal from '@/components/CourseDetailModal';
 import { Button } from '@/components/ui/button';
 import { PlayCircle, Loader2, Video as VideoIconLucide, AlertTriangle } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -20,30 +20,30 @@ import { getVideoCourses, getAnnouncements, incrementVideoCourseViews } from '@/
 const PC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 export default function HomePage() {
-  const { t, siteSettings, isLoadingSettings: isLoadingSiteSettings } = useTranslation();
+  const { t, siteSettings, isLoadingSettings: isLoadingSiteSettings, displayCurrency, // Use displayCurrency from context
+    exchangeRates: contextExchangeRates // Assuming exchangeRates are also in context or part of siteSettings
+  } = useTranslation();
+
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [isStreamLive, setIsStreamLive] = useState(false); 
+  const [isStreamLive, setIsStreamLive] = useState(false);
   const [streamTitleToDisplay, setStreamTitleToDisplay] = useState('');
-  const [receivedRemoteStream, setReceivedRemoteStream] = useState<MediaStream | null>(null); 
+  const [receivedRemoteStream, setReceivedRemoteStream] = useState<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const [broadcasterId, setBroadcasterId] = useState<string | null>(null);
   const [webRtcError, setWebRtcError] = useState<string | null>(null);
 
   const [videoCourses, setVideoCourses] = useState<Video[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
-  
-  // For VideoPlayerModal
+
   const [selectedVideoForPlayer, setSelectedVideoForPlayer] = useState<Video | null>(null);
   const [isVideoPlayerModalOpen, setIsVideoPlayerModalOpen] = useState(false);
 
-  // For CourseDetailModal
   const [selectedCourseForDetail, setSelectedCourseForDetail] = useState<Video | null>(null);
   const [isCourseDetailModalOpen, setIsCourseDetailModalOpen] = useState(false);
 
-
-  const [displayCurrency, setDisplayCurrency] = useState<ActiveCurrencySetting | null>(null);
-  const [currentExchangeRates, setCurrentExchangeRates] = useState<ExchangeRates | null>(null);
+  // const [displayCurrency, setDisplayCurrency] = useState<ActiveCurrencySetting | null>(null); // Removed, use from context
+  const [currentExchangeRates, setCurrentExchangeRates] = useState<ExchangeRates | null>(null); // Keep or use from context
 
   const [currentAnnouncement, setCurrentAnnouncement] = useState<Announcement | null>(null);
   const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
@@ -54,19 +54,19 @@ export default function HomePage() {
 
   useEffect(() => {
     if (siteSettings) {
-      const primary = siteSettings.activeCurrencies.find(c => c.isPrimary);
-      setDisplayCurrency(primary || siteSettings.activeCurrencies.find(c => c.id === 'ars') || siteSettings.activeCurrencies[0] || null);
-      setCurrentExchangeRates(siteSettings.exchangeRates);
+      // displayCurrency is now from context, no need to set it here
+      setCurrentExchangeRates(siteSettings.exchangeRates); // Or use contextExchangeRates if available
       setStreamTitleToDisplay(siteLiveStreamDefaultTitle || t('homepage.live.defaultTitle'));
     }
   }, [siteSettings, siteLiveStreamDefaultTitle, t]);
+
 
   useEffect(() => {
     const fetchCourses = async () => {
       setIsLoadingCourses(true);
       try {
-        const courses = await getVideoCourses(); // This should now fetch courses ordered by 'order'
-        setVideoCourses(courses); 
+        const courses = await getVideoCourses();
+        setVideoCourses(courses);
       } catch (error) {
         console.error("Failed to fetch video courses:", error);
       } finally {
@@ -76,36 +76,51 @@ export default function HomePage() {
     fetchCourses();
   }, []);
 
-  useEffect(() => {
-    const fetchAndShowAnnouncement = async () => {
-      if (isLoadingSiteSettings) return; 
-      setIsLoadingAnnouncement(true);
-      try {
-        const announcements = await getAnnouncements({ activeOnly: true, nonExpiredOnly: true });
-        if (announcements.length > 0) {
-          const latestAnnouncement = announcements[0]; // Already sorted by server
-          setCurrentAnnouncement(latestAnnouncement);
-          setIsAnnouncementModalOpen(true); 
+  const fetchAndShowAnnouncement = useCallback(async () => {
+    if (isLoadingSiteSettings) return;
+    setIsLoadingAnnouncement(true);
+    try {
+      const allAnnouncements = await getAnnouncements({ activeOnly: true, nonExpiredOnly: true });
+      let announcementToShow: Announcement | null = null;
+
+      for (const ann of allAnnouncements) {
+        if (ann.showOnce) {
+          if (typeof window !== 'undefined') {
+            const viewedKey = `announcement_viewed_${ann.id}`;
+            if (!localStorage.getItem(viewedKey)) {
+              announcementToShow = ann;
+              break;
+            }
+          }
         } else {
-          setCurrentAnnouncement(null);
-          setIsAnnouncementModalOpen(false);
+          announcementToShow = ann; // If not showOnce, it's a candidate
+          break;
         }
-      } catch (error) {
-        console.error("Failed to fetch or process announcements:", error);
-      } finally {
-        setIsLoadingAnnouncement(false);
       }
-    };
-    fetchAndShowAnnouncement();
+      
+      if (announcementToShow) {
+        setCurrentAnnouncement(announcementToShow);
+        setIsAnnouncementModalOpen(true);
+      } else {
+        setCurrentAnnouncement(null);
+        setIsAnnouncementModalOpen(false);
+      }
+    } catch (error) {
+      console.error("Failed to fetch or process announcements:", error);
+    } finally {
+      setIsLoadingAnnouncement(false);
+    }
   }, [isLoadingSiteSettings]);
+
+  useEffect(() => {
+    fetchAndShowAnnouncement();
+  }, [fetchAndShowAnnouncement]);
 
   const handleOpenVideoPlayer = (video: Video) => {
     setSelectedVideoForPlayer(video);
     setIsVideoPlayerModalOpen(true);
-    // Increment views when the video player modal is opened
     incrementVideoCourseViews(video.id).catch(err => {
         console.error("Failed to increment views for video:", video.id, err);
-        // Optionally, add a toast or some other user feedback if necessary
     });
   };
 
@@ -113,12 +128,11 @@ export default function HomePage() {
     setSelectedCourseForDetail(video);
     setIsCourseDetailModalOpen(true);
   };
-  
-  const handleWatchFromDetailModal = (video: Video) => {
-    setIsCourseDetailModalOpen(false); // Close detail modal
-    handleOpenVideoPlayer(video); // Open player modal
-  };
 
+  const handleWatchFromDetailModal = (video: Video) => {
+    setIsCourseDetailModalOpen(false);
+    handleOpenVideoPlayer(video);
+  };
 
   useEffect(() => {
     const newSocket = io({ path: '/api/socket_io' });
@@ -130,7 +144,6 @@ export default function HomePage() {
     });
 
     newSocket.on('broadcaster-ready', (data: { broadcasterId: string, streamTitle?: string }) => {
-      console.log('Visitor: Broadcaster is ready', data.broadcasterId, "Title:", data.streamTitle);
       setBroadcasterId(data.broadcasterId);
       setIsStreamLive(true);
       setWebRtcError(null);
@@ -138,76 +151,45 @@ export default function HomePage() {
     });
 
     newSocket.on('stream-title-updated', (data: { streamTitle: string }) => {
-      console.log('Visitor: Stream title updated', data.streamTitle);
       setStreamTitleToDisplay(data.streamTitle);
     });
 
     newSocket.on('offer-from-broadcaster', async ({ broadcasterId: bId, offer }) => {
       if (bId !== broadcasterId && !broadcasterId) setBroadcasterId(bId);
-      console.log('Visitor received offer from broadcaster:', bId, offer);
       setWebRtcError(null);
-
       if (peerConnectionRef.current && peerConnectionRef.current.signalingState !== 'closed') {
-        console.log('Visitor: Peer connection already exists. Closing before creating a new one.');
         peerConnectionRef.current.close();
       }
-
       const pc = new RTCPeerConnection(PC_CONFIG);
       peerConnectionRef.current = pc;
-
       pc.ontrack = event => {
-        console.log('Visitor: Received remote track event. Full event object:', event);
         if (event.streams && event.streams[0]) {
-          const remoteStreamInstance = event.streams[0];
-          console.log('Visitor: event.streams[0] is available. Stream ID:', remoteStreamInstance.id, 'Active:', remoteStreamInstance.active);
-          console.log('Visitor: Audio tracks:', remoteStreamInstance.getAudioTracks().length, 'Video tracks:', remoteStreamInstance.getVideoTracks().length);
-          setReceivedRemoteStream(remoteStreamInstance);
+          setReceivedRemoteStream(event.streams[0]);
           setIsStreamLive(true);
         } else {
-          console.warn('Visitor: ontrack event fired but no event.streams[0] found. event.track:', event.track);
           setWebRtcError(t('homepage.live.webrtcSetupError') + ': No valid stream received in ontrack.');
           setReceivedRemoteStream(null);
-          setIsStreamLive(false); // Ensure live status is false if stream is not valid
+          setIsStreamLive(false);
         }
       };
-
       pc.onicecandidate = event => {
         if (event.candidate && newSocket && newSocket.connected) {
           newSocket.emit('candidate-to-broadcaster', { broadcasterId: bId, candidate: event.candidate });
         }
       };
-
       pc.oniceconnectionstatechange = () => {
         if (!pc) return;
         const currentState = pc.iceConnectionState;
-        console.log(`Visitor: ICE connection state change: ${currentState}`);
         if (currentState === 'connected' || currentState === 'completed') {
-          setIsStreamLive(true);
-          setWebRtcError(null);
+          setIsStreamLive(true); setWebRtcError(null);
         } else if (currentState === 'failed') {
-          console.error('Visitor: ICE connection failed.');
-          setIsStreamLive(false);
-          setReceivedRemoteStream(null);
-          setWebRtcError(t('homepage.live.connectionLostError'));
-          if (peerConnectionRef.current) {
-            peerConnectionRef.current.close();
-            peerConnectionRef.current = null; // Clear ref after closing
-          }
+          setIsStreamLive(false); setReceivedRemoteStream(null); setWebRtcError(t('homepage.live.connectionLostError'));
+          if (peerConnectionRef.current) { peerConnectionRef.current.close(); peerConnectionRef.current = null; }
         } else if (currentState === 'disconnected' || currentState === 'closed') {
-           if (isStreamLive) { // Only act if it was previously live
-                console.log(`Visitor: ICE connection ${currentState}. Stream might have ended or been interrupted.`);
-                setIsStreamLive(false);
-                setReceivedRemoteStream(null);
-                // Do not set WebRtcError here for 'disconnected', as it could be a temporary network blip or normal closure.
-                // 'failed' is a more definitive error state.
-           }
-           if (peerConnectionRef.current) {
-              peerConnectionRef.current.close();
-              peerConnectionRef.current = null; // Clear ref after closing
-           }
+           if (isStreamLive) { setIsStreamLive(false); setReceivedRemoteStream(null); }
+           if (peerConnectionRef.current) { peerConnectionRef.current.close(); peerConnectionRef.current = null; }
         }
       };
-
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
@@ -216,88 +198,53 @@ export default function HomePage() {
           newSocket.emit('answer-to-broadcaster', { broadcasterId: bId, answer });
         }
       } catch (error) {
-        console.error('Error handling offer or creating answer:', error);
         setWebRtcError(`${t('homepage.live.webrtcSetupError')}: ${error instanceof Error ? error.message : String(error)}`);
-        setIsStreamLive(false);
-        setReceivedRemoteStream(null);
-        if (peerConnectionRef.current) {
-          peerConnectionRef.current.close();
-          peerConnectionRef.current = null;
-        }
+        setIsStreamLive(false); setReceivedRemoteStream(null);
+        if (peerConnectionRef.current) { peerConnectionRef.current.close(); peerConnectionRef.current = null; }
       }
     });
-
     newSocket.on('candidate-from-broadcaster', ({ candidate }) => {
       if (peerConnectionRef.current && candidate && peerConnectionRef.current.signalingState !== 'closed') {
         peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => {
-          console.error('Error adding received ICE candidate:', e);
           setWebRtcError(`${t('homepage.live.iceCandidateError')}: ${e instanceof Error ? e.message : String(e)}`);
         });
       }
     });
-
     newSocket.on('broadcaster-disconnected', () => {
-      console.log('Visitor: Broadcaster disconnected (event received).');
-      setIsStreamLive(false);
-      setReceivedRemoteStream(null);
-      setWebRtcError(null); 
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
+      setIsStreamLive(false); setReceivedRemoteStream(null); setWebRtcError(null);
+      if (peerConnectionRef.current) { peerConnectionRef.current.close(); peerConnectionRef.current = null; }
       setBroadcasterId(null);
       setStreamTitleToDisplay(siteLiveStreamDefaultTitle || t('homepage.live.defaultTitle'));
     });
-
-    newSocket.on('disconnect', (reason) => {
-      console.log('Visitor disconnected from Socket.IO server. Reason:', reason);
-      // If socket disconnects, we should probably also consider the stream "not live" from user perspective
-      setIsStreamLive(false);
-      setReceivedRemoteStream(null);
-       if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
+    newSocket.on('disconnect', () => {
+      setIsStreamLive(false); setReceivedRemoteStream(null);
+       if (peerConnectionRef.current) { peerConnectionRef.current.close(); peerConnectionRef.current = null; }
     });
-
     return () => {
-      console.log('Homepage cleaning up: closing peer connection, disconnecting socket.');
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
-      if (newSocket) {
-        newSocket.disconnect();
-      }
-      setSocket(null);
-      setReceivedRemoteStream(null);
-      setIsStreamLive(false);
+      if (peerConnectionRef.current) { peerConnectionRef.current.close(); peerConnectionRef.current = null; }
+      if (newSocket) newSocket.disconnect();
+      setSocket(null); setReceivedRemoteStream(null); setIsStreamLive(false);
     };
-  }, [siteSettings, siteLiveStreamDefaultTitle, t]); // Simplified dependencies
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteSettings, siteLiveStreamDefaultTitle, t, broadcasterId]);
 
   useEffect(() => {
     if (receivedRemoteStream && remoteVideoRef.current) {
-      console.log('Visitor: Assigning receivedRemoteStream to video element. Stream ID:', receivedRemoteStream.id, 'Active:', receivedRemoteStream.active);
       remoteVideoRef.current.srcObject = receivedRemoteStream;
-      remoteVideoRef.current.play().then(() => {
-        console.log("Visitor: Video element play() successful after stream assignment.");
-        setWebRtcError(null); // Clear any previous error if playback starts
-      }).catch(e => {
-        console.error("Visitor: Video element play() error after stream assignment:", e);
-        setWebRtcError(`${t('homepage.live.webrtcSetupError')}: Video playback failed - ${e instanceof Error ? e.message : String(e)}`);
-      });
+      remoteVideoRef.current.play().then(() => setWebRtcError(null))
+      .catch(e => setWebRtcError(`${t('homepage.live.webrtcSetupError')}: Video playback failed - ${e instanceof Error ? e.message : String(e)}`));
     } else if (!receivedRemoteStream && remoteVideoRef.current) {
-      console.log('Visitor: receivedRemoteStream is null, clearing srcObject.');
       remoteVideoRef.current.srcObject = null;
     }
-  }, [receivedRemoteStream, t]); // Removed remoteVideoRef from deps as it's a ref
-
+  }, [receivedRemoteStream, t]);
 
   if (isLoadingSiteSettings || !siteSettings) {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
-  
+
   const displayedCourses = videoCourses.slice(0, 3);
+  // Use contextExchangeRates or fallback to siteSettings.exchangeRates for VideoCard and CourseDetailModal
+  const effectiveExchangeRates = currentExchangeRates || siteSettings.exchangeRates;
 
 
   return (
@@ -338,7 +285,6 @@ export default function HomePage() {
                   </p>
                 </div>
               )}
-
               {webRtcError && (
                 <Alert variant="destructive" className="mt-4 text-left">
                   <AlertTriangle className="h-4 w-4" />
@@ -359,16 +305,16 @@ export default function HomePage() {
               <div className="flex justify-center items-center h-48">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
               </div>
-            ) : displayedCourses.length > 0 && displayCurrency && currentExchangeRates ? (
+            ) : displayedCourses.length > 0 && displayCurrency && effectiveExchangeRates ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
                 {displayedCourses.map((video) => (
                   <VideoCard
                     key={video.id}
                     video={video}
                     onWatchNowClick={handleOpenVideoPlayer}
-                    onCourseCardClick={handleOpenCourseDetail} // Pass new handler
+                    onCourseCardClick={handleOpenCourseDetail}
                     displayCurrency={displayCurrency}
-                    exchangeRates={currentExchangeRates}
+                    exchangeRates={effectiveExchangeRates}
                   />
                 ))}
               </div>
@@ -396,24 +342,28 @@ export default function HomePage() {
           title={selectedVideoForPlayer.title}
         />
       )}
-      {selectedCourseForDetail && displayCurrency && currentExchangeRates && (
+      {selectedCourseForDetail && displayCurrency && effectiveExchangeRates && (
         <CourseDetailModal
           isOpen={isCourseDetailModalOpen}
           onOpenChange={setIsCourseDetailModalOpen}
           video={selectedCourseForDetail}
           onWatchVideo={handleWatchFromDetailModal}
           displayCurrency={displayCurrency}
-          exchangeRates={currentExchangeRates}
+          exchangeRates={effectiveExchangeRates}
         />
       )}
       {!isLoadingAnnouncement && currentAnnouncement && (
         <AnnouncementModal
           isOpen={isAnnouncementModalOpen}
-          onOpenChange={setIsAnnouncementModalOpen}
+          onOpenChange={(open) => {
+            setIsAnnouncementModalOpen(open);
+            if (!open && currentAnnouncement?.showOnce && currentAnnouncement.id && typeof window !== 'undefined') {
+              localStorage.setItem(`announcement_viewed_${currentAnnouncement.id}`, 'true');
+            }
+          }}
           announcement={currentAnnouncement}
         />
       )}
     </div>
   );
 }
-    

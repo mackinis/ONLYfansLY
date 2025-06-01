@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Film, UserCircle, Zap, Languages as LanguagesIcon, Check, Settings, Menu, LogOut, LayoutDashboard } from 'lucide-react';
+import { Film, UserCircle, Zap, Languages as LanguagesIcon, Check, Settings, Menu, LogOut, LayoutDashboard, Coins } from 'lucide-react';
 import { useTranslation } from '@/context/I18nContext';
 import {
   DropdownMenu,
@@ -23,14 +23,24 @@ import {
   SheetTrigger,
   SheetClose,
 } from "@/components/ui/sheet";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import { cn } from '@/lib/utils';
-import type { SessionUserProfile } from '@/lib/types';
+import type { SessionUserProfile, HeaderDisplayMode, ActiveCurrencySetting } from '@/lib/types';
+import { Separator } from '../ui/separator';
+import { defaultThemeColorsHex } from '@/lib/config'; // Import default theme colors
 
 export default function Header() {
-  const { t, language, setLanguage, siteSettings, currentSiteTitle, currentSiteIconUrl } = useTranslation();
+  const {
+    t,
+    language,
+    setLanguage,
+    siteSettings,
+    currentSiteTitle,
+    displayCurrency,
+    setDisplayCurrency,
+  } = useTranslation();
   const pathname = usePathname();
   const router = useRouter();
   const [isClient, setIsClient] = useState(false);
@@ -41,6 +51,38 @@ export default function Header() {
   const [isStreamActuallyLive, setIsStreamActuallyLive] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
 
+  const [userAvatarPrimaryColor, setUserAvatarPrimaryColor] = useState('D4AF37');
+  const [userAvatarPrimaryFgColor, setUserAvatarPrimaryFgColor] = useState('1A1A1A');
+
+  const headerDisplayMode = siteSettings?.headerDisplayMode || 'both';
+  const allowUserToChooseLanguage = siteSettings?.allowUserToChooseLanguage ?? false;
+  const allowUserToChooseCurrency = siteSettings?.allowUserToChooseCurrency ?? false;
+  const activeCurrencies = siteSettings?.activeCurrencies || [];
+
+  const effectiveHeaderIconUrl = siteSettings?.headerIconUrl || siteSettings?.siteIconUrl;
+
+  useEffect(() => {
+    if (siteSettings?.themeColors) {
+      const primarySetting = siteSettings.themeColors.find(s => s.id === 'primary');
+      const primaryFgSetting = siteSettings.themeColors.find(s => s.id === 'primary-foreground');
+
+      if (primarySetting?.value) {
+        setUserAvatarPrimaryColor(primarySetting.value.replace('#', ''));
+      } else {
+        const defaultPrimary = defaultThemeColorsHex.find(s => s.id === 'primary')?.defaultValueHex || 'D4AF37';
+        setUserAvatarPrimaryColor(defaultPrimary.replace('#', ''));
+      }
+
+      if (primaryFgSetting?.value) {
+        setUserAvatarPrimaryFgColor(primaryFgSetting.value.replace('#', ''));
+      } else {
+        const defaultPrimaryFg = defaultThemeColorsHex.find(s => s.id === 'primary-foreground')?.defaultValueHex || '1A1A1A';
+        setUserAvatarPrimaryFgColor(defaultPrimaryFg.replace('#', ''));
+      }
+    }
+  }, [siteSettings]);
+
+
   const updateLoginState = () => {
     if (typeof window !== 'undefined') {
       const adminLoggedIn = sessionStorage.getItem('aurum_is_admin_logged_in') === 'true';
@@ -48,7 +90,7 @@ export default function Header() {
       const userProfileString = sessionStorage.getItem('aurum_user_profile');
 
       setIsAdminLoggedIn(adminLoggedIn);
-      setIsUserLoggedIn(!!userId && !adminLoggedIn); // User is logged in if userId exists and not admin
+      setIsUserLoggedIn(!!userId && !adminLoggedIn);
 
       if (userProfileString) {
         try {
@@ -65,13 +107,11 @@ export default function Header() {
 
   useEffect(() => {
     setIsClient(true);
-    updateLoginState(); // Initial check
+    updateLoginState();
 
-    const handleLoginStatusChange = () => {
-      updateLoginState();
-    };
+    const handleLoginStatusChange = () => updateLoginState();
     window.addEventListener('aurumLoginStatusChanged', handleLoginStatusChange);
-    window.addEventListener('storage', (event) => { // Listen for storage changes from other tabs
+    window.addEventListener('storage', (event) => {
       if (event.key === 'aurum_is_admin_logged_in' || event.key === 'aurum_user_id' || event.key === 'aurum_user_profile') {
         handleLoginStatusChange();
       }
@@ -79,12 +119,7 @@ export default function Header() {
 
     const newSocket = io({ path: '/api/socket_io', autoConnect: true });
     setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      console.log('Header connected to Socket.IO for live status:', newSocket.id);
-      newSocket.emit('register-viewer');
-    });
-
+    newSocket.on('connect', () => newSocket.emit('register-viewer'));
     newSocket.on('broadcaster-ready', () => setIsStreamActuallyLive(true));
     newSocket.on('broadcaster-disconnected', () => setIsStreamActuallyLive(false));
     newSocket.on('disconnect', () => setIsStreamActuallyLive(false));
@@ -92,13 +127,7 @@ export default function Header() {
     return () => {
       window.removeEventListener('aurumLoginStatusChanged', handleLoginStatusChange);
       window.removeEventListener('storage', handleLoginStatusChange);
-      if (newSocket) {
-        newSocket.off('connect');
-        newSocket.off('broadcaster-ready');
-        newSocket.off('broadcaster-disconnected');
-        newSocket.off('disconnect');
-        newSocket.disconnect();
-      }
+      if (newSocket) newSocket.disconnect();
     };
   }, []);
 
@@ -108,12 +137,12 @@ export default function Header() {
       sessionStorage.removeItem('aurum_user_id');
       sessionStorage.removeItem('aurum_user_profile');
     }
-    updateLoginState(); // Update state immediately
-    window.dispatchEvent(new Event('aurumLoginStatusChanged')); // Notify other components
+    updateLoginState();
+    window.dispatchEvent(new Event('aurumLoginStatusChanged'));
     router.push('/login');
+    setIsMobileMenuOpen(false);
   };
 
-  const allowUserToChooseLanguage = siteSettings?.allowUserToChooseLanguage ?? false;
   const isAdminPage = pathname.startsWith('/admin');
 
   const navLinks = [
@@ -132,81 +161,66 @@ export default function Header() {
     return 'U';
   };
 
+  const userAvatarPlaceholderUrl = `https://placehold.co/40x40/${userAvatarPrimaryColor}/${userAvatarPrimaryFgColor}?text=${getAvatarFallback()}`;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 max-w-screen-2xl items-center justify-between">
+      <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4">
         <Link href="/" className="flex items-center space-x-2">
-          {currentSiteIconUrl ? (
-            <Image src={currentSiteIconUrl} alt={currentSiteTitle || t('header.title')} width={32} height={32} className="h-8 w-8 rounded-sm" data-ai-hint="logo" />
-          ) : (
-            <Film className="h-8 w-8 text-primary" />
+          {(headerDisplayMode === 'logo' || headerDisplayMode === 'both') && (
+            effectiveHeaderIconUrl ? (
+              <Image src={effectiveHeaderIconUrl} alt={currentSiteTitle || t('header.title')} width={32} height={32} className="h-8 w-8 rounded-sm" data-ai-hint="logo" />
+            ) : (
+              <Film className="h-8 w-8 text-primary" />
+            )
           )}
-          <span className="font-headline text-2xl font-bold text-primary">{currentSiteTitle || t('header.title')}</span>
+          {(headerDisplayMode === 'title' || headerDisplayMode === 'both') && (
+            <span className={cn(
+              "font-headline text-2xl font-bold text-primary",
+              headerDisplayMode === 'logo' && "sr-only md:not-sr-only"
+            )}>
+              {currentSiteTitle || t('header.title')}
+            </span>
+          )}
         </Link>
 
         {!isAdminPage && (
-          <>
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
-              {navLinks.map(link => (
-                <Link
-                  key={link.labelKey}
-                  href={link.href} // Always link to the href
-                  className={cn(
-                    "transition-colors flex items-center hover:text-primary"
-                  )}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  {link.live && <Zap className={cn("h-4 w-4 mr-1 text-red-500", isStreamActuallyLive ? "animate-pulse" : "opacity-50")} />}
-                  {t(link.labelKey)}
-                </Link>
-              ))}
-            </nav>
-
-            {/* Mobile Navigation Trigger */}
-            <div className="md:hidden">
-              <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <Menu className="h-6 w-6" />
-                    <span className="sr-only">{t('header.mobileMenuButton')}</span>
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-[280px] bg-background p-0">
-                  <SheetHeader className="p-4 border-b">
-                     <SheetTitle className="text-primary font-headline flex items-center">
-                        {currentSiteIconUrl ? (
-                            <Image src={currentSiteIconUrl} alt={currentSiteTitle || t('header.title')} width={24} height={24} className="h-6 w-6 rounded-sm mr-2" data-ai-hint="logo small" />
-                        ) : (
-                            <Film className="h-6 w-6 text-primary mr-2" />
-                        )}
-                        {currentSiteTitle || t('header.title')}
-                     </SheetTitle>
-                  </SheetHeader>
-                  <nav className="flex flex-col space-y-2 p-4">
-                    {navLinks.map(link => (
-                      <SheetClose asChild key={link.labelKey}>
-                        <Link
-                          href={link.href} // Always link to the href
-                          className={cn(
-                            "py-2 px-3 rounded-md flex items-center text-base hover:bg-accent hover:text-accent-foreground"
-                          )}
-                          onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                          {link.live && <Zap className={cn("h-5 w-5 mr-2 text-red-500", isStreamActuallyLive ? "animate-pulse" : "opacity-50")} />}
-                          {t(link.labelKey)}
-                        </Link>
-                      </SheetClose>
-                    ))}
-                  </nav>
-                </SheetContent>
-              </Sheet>
-            </div>
-          </>
+          <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
+            {navLinks.map(link => (
+              <Link
+                key={link.labelKey}
+                href={link.href}
+                className={cn("transition-colors flex items-center hover:text-primary")}
+              >
+                {link.live && <Zap className={cn("h-4 w-4 mr-1 text-red-500", isStreamActuallyLive ? "animate-pulse" : "opacity-50")} />}
+                {t(link.labelKey)}
+              </Link>
+            ))}
+          </nav>
         )}
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1 sm:space-x-2">
+          {allowUserToChooseCurrency && !isAdminPage && activeCurrencies.length > 1 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="px-2 sm:px-3" aria-label={t('header.currencySelectorTooltip', {defaultValue: 'Select Currency'})}>
+                  <Coins className="h-5 w-5 sm:mr-1" />
+                  <span className="hidden sm:inline">{displayCurrency?.code}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>{t('header.currencySelectorTooltip', {defaultValue: 'Select Currency'})}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {activeCurrencies.map(currency => (
+                  <DropdownMenuItem key={currency.id} onClick={() => setDisplayCurrency(currency)} disabled={displayCurrency?.id === currency.id}>
+                    {displayCurrency?.id === currency.id && <Check className="mr-2 h-4 w-4" />}
+                    {currency.name} ({currency.symbol})
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           {allowUserToChooseLanguage && !isAdminPage && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -253,7 +267,7 @@ export default function Header() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={`https://placehold.co/40x40/D4AF37/1A1A1A?text=${getAvatarFallback()}`} alt={currentUserProfile.name} data-ai-hint="user avatar"/>
+                    <AvatarImage src={currentUserProfile.avatarUrl || userAvatarPlaceholderUrl} alt={currentUserProfile.name || 'User'} data-ai-hint="user avatar"/>
                     <AvatarFallback>{getAvatarFallback()}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -282,8 +296,98 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+
+          {!isAdminPage && (
+            <div className="md:hidden"> {/* Este div ahora contiene el SheetTrigger */}
+              <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <Menu className="h-6 w-6" />
+                    <span className="sr-only">{t('header.mobileMenuButton')}</span>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[280px] bg-background p-0 flex flex-col">
+                  <SheetHeader className="p-4 border-b">
+                     <SheetTitle className="text-primary font-headline flex items-center text-lg">
+                        {(headerDisplayMode === 'logo' || headerDisplayMode === 'both') && (
+                          effectiveHeaderIconUrl ? (
+                              <Image src={effectiveHeaderIconUrl} alt={currentSiteTitle || t('header.title')} width={24} height={24} className="h-6 w-6 rounded-sm mr-2" data-ai-hint="logo small" />
+                          ) : (
+                              <Film className="h-6 w-6 text-primary mr-2" />
+                          )
+                        )}
+                        {(headerDisplayMode === 'title' || headerDisplayMode === 'both') && (
+                           currentSiteTitle || t('header.title')
+                        )}
+                     </SheetTitle>
+                  </SheetHeader>
+                  <nav className="flex flex-col space-y-1 p-4 flex-grow">
+                    {navLinks.map(link => (
+                      <SheetClose asChild key={link.labelKey}>
+                        <Link
+                          href={link.href}
+                          className={cn("py-2.5 px-3 rounded-md flex items-center text-base hover:bg-accent hover:text-accent-foreground")}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          {link.live && <Zap className={cn("h-5 w-5 mr-2 text-red-500", isStreamActuallyLive ? "animate-pulse" : "opacity-50")} />}
+                          {t(link.labelKey)}
+                        </Link>
+                      </SheetClose>
+                    ))}
+                  </nav>
+                  <Separator />
+                  <div className="p-4 space-y-2">
+                    {isClient && !isAdminLoggedIn && !isUserLoggedIn && (
+                      <>
+                        <SheetClose asChild>
+                            <Button variant="outline" className="w-full" asChild>
+                                <Link href="/login"><UserCircle className="mr-2 h-4 w-4" /> {t('header.login')}</Link>
+                            </Button>
+                        </SheetClose>
+                        <SheetClose asChild>
+                            <Button className="w-full" asChild>
+                                <Link href="/register">{t('header.register')}</Link>
+                            </Button>
+                        </SheetClose>
+                      </>
+                    )}
+                    {isClient && isAdminLoggedIn && (
+                        <>
+                        <SheetClose asChild>
+                            <Button variant="ghost" className="w-full justify-start" asChild>
+                            <Link href="/admin"><LayoutDashboard className="mr-2 h-4 w-4" />{t('header.adminPanel')}</Link>
+                            </Button>
+                        </SheetClose>
+                        <SheetClose asChild>
+                            <Button variant="destructive" className="w-full justify-start" onClick={handleLogout}>
+                            <LogOut className="mr-2 h-4 w-4" />{t('header.logout')}
+                            </Button>
+                        </SheetClose>
+                        </>
+                    )}
+                    {isClient && isUserLoggedIn && (
+                        <>
+                        <SheetClose asChild>
+                            <Button variant="ghost" className="w-full justify-start" asChild>
+                            <Link href="/account"><UserCircle className="mr-2 h-4 w-4" />{t('header.myAccount')}</Link>
+                            </Button>
+                        </SheetClose>
+                        <SheetClose asChild>
+                            <Button variant="destructive" className="w-full justify-start" onClick={handleLogout}>
+                            <LogOut className="mr-2 h-4 w-4" />{t('header.logout')}
+                            </Button>
+                        </SheetClose>
+                        </>
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
+          )}
         </div>
       </div>
     </header>
   );
 }
+
+    

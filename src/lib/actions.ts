@@ -2,10 +2,11 @@
 'use server';
 
 import { z } from 'zod';
-import type { Testimonial, UserProfile, Video, SiteSettings, SocialLink, Announcement, AnnouncementContentType } from './types';
+import type { Testimonial, UserProfile, Video, SiteSettings, SocialLink, Announcement, AnnouncementContentType, HeaderDisplayMode, FooterDisplayMode, ColorSetting, DashboardStats, TestimonialMediaOption } from './types';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, Timestamp, orderBy, serverTimestamp, deleteDoc, getDoc, setDoc, runTransaction, increment } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, Timestamp, orderBy, serverTimestamp, deleteDoc, getDoc, setDoc, runTransaction, increment, count } from 'firebase/firestore';
 import { sendActivationEmail } from './emailService';
+import { defaultThemeColorsHex } from './config'; 
 
 function generateAlphanumericToken(length: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -34,13 +35,26 @@ export async function submitTestimonial(formData: z.infer<typeof testimonialSche
   }
 
   try {
+    const siteSettings = await getSiteSettings();
+    const mediaOptions = siteSettings.testimonialMediaOptions || 'both';
+
+    let photoUrls: string[] = [];
+    if ((mediaOptions === 'photos' || mediaOptions === 'both') && parsedData.data.photoUrlsInput) {
+      photoUrls = parsedData.data.photoUrlsInput.split(',').map(s => s.trim()).filter(s => s && (s.startsWith('http://') || s.startsWith('https://')));
+    }
+
+    let videoUrls: string[] = [];
+    if ((mediaOptions === 'videos' || mediaOptions === 'both') && parsedData.data.videoUrlsInput) {
+      videoUrls = parsedData.data.videoUrlsInput.split(',').map(s => s.trim()).filter(s => s && (s.startsWith('http://') || s.startsWith('https://')));
+    }
+    
     const newTestimonialData = {
       author: parsedData.data.author,
       text: parsedData.data.text,
       email: parsedData.data.email,
       userId: parsedData.data.userId,
-      photoUrls: parsedData.data.photoUrlsInput ? parsedData.data.photoUrlsInput.split(',').map(s => s.trim()).filter(s => s && (s.startsWith('http://') || s.startsWith('https://'))) : [],
-      videoUrls: parsedData.data.videoUrlsInput ? parsedData.data.videoUrlsInput.split(',').map(s => s.trim()).filter(s => s && (s.startsWith('http://') || s.startsWith('https://'))) : [],
+      photoUrls: photoUrls,
+      videoUrls: videoUrls,
       date: serverTimestamp(),
       status: 'pending' as Testimonial['status'],
     };
@@ -102,7 +116,7 @@ export async function getTestimonials(status?: Testimonial['status'], userId?: s
 export async function updateTestimonialStatus(id: string, status: Testimonial['status']): Promise<Testimonial | null> {
   try {
     const testimonialRef = doc(db, 'testimonials', id);
-    await updateDoc(testimonialRef, { status, updatedAt: serverTimestamp() }); // Also update updatedAt
+    await updateDoc(testimonialRef, { status, updatedAt: serverTimestamp() }); 
     const updatedSnap = await getDoc(testimonialRef);
     if (updatedSnap.exists()) {
         const data = updatedSnap.data();
@@ -197,7 +211,7 @@ export async function registerUser(data: z.infer<typeof registerUserSchema>) {
 
     const activationToken = generateAlphanumericToken(24);
     const activationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-    const passwordHash = password; // Plain text password, consider hashing in a real app
+    const passwordHash = password; 
     const isAdminEmail = email === process.env.ADMIN_EMAIL;
     const userRole = isAdminEmail ? 'admin' : 'user';
 
@@ -211,7 +225,7 @@ export async function registerUser(data: z.infer<typeof registerUserSchema>) {
       activationToken,
       activationTokenExpires,
       canSubmitTestimonial: false,
-      avatarUrl: '', 
+      avatarUrl: '',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -221,7 +235,7 @@ export async function registerUser(data: z.infer<typeof registerUserSchema>) {
       activationTokenExpires: Timestamp.fromDate(activationTokenExpires),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      testimonialCount: 0, // Initialize testimonialCount
+      testimonialCount: 0,
     });
 
     const emailHtml = `
@@ -294,15 +308,15 @@ export async function verifyUserActivationToken(userId: string, token: string) {
 
     if (!tokenExpiryDate || tokenExpiryDate < new Date()) {
         await updateDoc(userRef, {
-            activationToken: null, 
-            activationTokenExpires: null, 
+            activationToken: null,
+            activationTokenExpires: null,
         });
       return { success: false, message: 'El token de activación ha expirado. Solicita uno nuevo.' };
     }
     await updateDoc(userRef, {
       isVerified: true,
-      isActive: true, 
-      canSubmitTestimonial: userData.role === 'user', 
+      isActive: true,
+      canSubmitTestimonial: userData.role === 'user',
       activationToken: null,
       activationTokenExpires: null,
       updatedAt: serverTimestamp(),
@@ -368,7 +382,6 @@ export async function getAllUsers(): Promise<UserProfile[]> {
         return [];
     }
 
-    // Fetch all testimonials once to count them
     const testimonialsCol = collection(db, 'testimonials');
     const testimonialsSnapshot = await getDocs(testimonialsCol);
     const testimonialCounts: Record<string, number> = {};
@@ -389,7 +402,7 @@ export async function getAllUsers(): Promise<UserProfile[]> {
         activationTokenExpires: (data.activationTokenExpires as Timestamp)?.toDate(),
         createdAt: (data.createdAt as Timestamp)?.toDate(),
         updatedAt: (data.updatedAt as Timestamp)?.toDate(),
-        testimonialCount: testimonialCounts[docSnap.id] || 0, // Add testimonial count
+        testimonialCount: testimonialCounts[docSnap.id] || 0,
       } as UserProfile);
     });
     return users;
@@ -410,7 +423,6 @@ export async function getUserProfileById(userId: string): Promise<UserProfile | 
     }
     const userData = userSnap.data();
 
-    // Get testimonial count for this specific user
     const testimonialsCol = collection(db, 'testimonials');
     const q = query(testimonialsCol, where('userId', '==', userId));
     const testimonialsSnapshot = await getDocs(q);
@@ -509,11 +521,11 @@ export async function getAdminProfile(): Promise<UserProfile | null> {
     return {
       id: adminDoc.id,
       ...adminData,
-      avatarUrl: adminData.avatarUrl || '', 
+      avatarUrl: adminData.avatarUrl || '',
       activationTokenExpires: (adminData.activationTokenExpires as Timestamp)?.toDate(),
       createdAt: (adminData.createdAt as Timestamp)?.toDate(),
       updatedAt: (adminData.updatedAt as Timestamp)?.toDate(),
-      testimonialCount: adminData.testimonialCount || 0, // Ensure admin also has this
+      testimonialCount: adminData.testimonialCount || 0,
     } as UserProfile;
   } catch (error) {
     console.error('Error fetching admin profile:', error);
@@ -529,7 +541,7 @@ export async function updateAdminProfile(adminId: string, data: z.infer<typeof a
   try {
     const adminRef = doc(db, 'users', adminId);
     await updateDoc(adminRef, {
-      ...validation.data, 
+      ...validation.data,
       updatedAt: serverTimestamp(),
     });
     return { success: true, message: "Admin profile updated successfully." };
@@ -546,7 +558,7 @@ export async function updateAdminPassword(adminId: string, data: z.infer<typeof 
   }
   try {
     const adminRef = doc(db, 'users', adminId);
-    const newPasswordHash = data.newPassword; 
+    const newPasswordHash = data.newPassword;
     await updateDoc(adminRef, {
       passwordHash: newPasswordHash,
       updatedAt: serverTimestamp(),
@@ -575,19 +587,55 @@ const videoCourseSchema = z.object({
   previewImageUrl: z.string().url("Preview Image URL must be a valid URL").optional().or(z.literal('')),
   videoUrl: z.string().url("Video URL must be a valid URL"),
   priceArs: z.coerce.number().positive("Price must be a positive number"),
+  discountInput: z.string().optional().or(z.literal('')), // e.g., "10%" or "5000" (for fixed final price)
   duration: z.string().optional(),
-  order: z.number().int().positive().optional(), // Optional for creation, will be auto-assigned
-  views: z.number().int().min(0).default(0), // Add views field
+  // 'order' and 'views' are managed by the system, not directly by this form
+  // finalPriceArs is calculated, not directly from form
 });
 
-export async function createVideoCourse(data: Omit<z.input<typeof videoCourseSchema>, 'order' | 'views'> & { order?: number, views?: number }) {
-  const validation = videoCourseSchema.omit({ order: true, views: true }).safeParse(data); 
+interface PriceCalculationResult {
+  finalPrice: number;
+  processedDiscountValueForStorage: string | null; // This is what gets stored as discountInput
+}
+
+function calculateCoursePrices(
+  originalPrice: number,
+  discountInputValue?: string | null
+): PriceCalculationResult {
+  let finalPrice = originalPrice;
+  let processedDiscountValueForStorage: string | null = null;
+
+  if (discountInputValue && typeof discountInputValue === 'string' && discountInputValue.trim() !== '') {
+    const trimmedDiscount = discountInputValue.trim();
+    if (trimmedDiscount.endsWith('%')) {
+      const percentage = parseFloat(trimmedDiscount.slice(0, -1));
+      if (!isNaN(percentage) && percentage >= 0 && percentage <= 100) {
+        finalPrice = originalPrice * (1 - percentage / 100);
+        processedDiscountValueForStorage = `${percentage}%`;
+      }
+    } else {
+      const fixedFinalPrice = parseFloat(trimmedDiscount);
+      if (!isNaN(fixedFinalPrice) && fixedFinalPrice >= 0 && fixedFinalPrice < originalPrice) {
+        finalPrice = fixedFinalPrice;
+        processedDiscountValueForStorage = fixedFinalPrice.toString();
+      }
+    }
+  }
+  return { finalPrice: Math.round(finalPrice * 100) / 100, processedDiscountValueForStorage };
+}
+
+export async function createVideoCourse(data: z.input<typeof videoCourseSchema>) {
+  const validation = videoCourseSchema.safeParse(data);
   if (!validation.success) {
     return { success: false, message: "Invalid course data.", errors: validation.error.flatten().fieldErrors };
   }
   try {
+    const { priceArs, discountInput, ...restOfData } = validation.data;
+    
+    const { finalPrice, processedDiscountValueForStorage } = calculateCoursePrices(priceArs, discountInput);
+
     const coursesCol = collection(db, 'videoCourses');
-    const orderQuery = query(coursesCol, orderBy('order', 'desc'), where('order', '>=', 0)); // Ensure order exists
+    const orderQuery = query(coursesCol, orderBy('order', 'desc'), where('order', '>=', 0));
     const orderSnapshot = await getDocs(orderQuery);
     let maxOrder = 0;
     if (!orderSnapshot.empty) {
@@ -599,9 +647,12 @@ export async function createVideoCourse(data: Omit<z.input<typeof videoCourseSch
     const newOrder = maxOrder + 1;
 
     const docRef = await addDoc(coursesCol, {
-      ...validation.data,
+      ...restOfData,
+      priceArs: priceArs, // Original price
+      discountInput: processedDiscountValueForStorage, // User's input for discount ("10%" or "79990")
+      finalPriceArs: finalPrice, // Calculated final price
       order: newOrder,
-      views: 0, // Initialize views to 0
+      views: 0,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -615,7 +666,7 @@ export async function createVideoCourse(data: Omit<z.input<typeof videoCourseSch
 export async function getVideoCourses(): Promise<Video[]> {
   try {
     const coursesCol = collection(db, 'videoCourses');
-    const q = query(coursesCol, orderBy('order', 'asc')); // Order by the 'order' field
+    const q = query(coursesCol, orderBy('order', 'asc'));
     const querySnapshot = await getDocs(q);
     const courses: Video[] = [];
     querySnapshot.forEach((docSnap) => {
@@ -627,9 +678,11 @@ export async function getVideoCourses(): Promise<Video[]> {
         previewImageUrl: data.previewImageUrl,
         videoUrl: data.videoUrl,
         priceArs: data.priceArs,
+        discountInput: data.discountInput,
+        finalPriceArs: data.finalPriceArs,
         duration: data.duration,
-        order: data.order || 0, // Default order if not set
-        views: data.views || 0,  // Default views if not set
+        order: data.order || 0,
+        views: data.views || 0,
         createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
         updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
       } as Video);
@@ -641,21 +694,41 @@ export async function getVideoCourses(): Promise<Video[]> {
   }
 }
 
-export async function updateVideoCourse(id: string, data: Partial<z.infer<typeof videoCourseSchema>>) {
+export async function updateVideoCourse(id: string, data: Partial<z.input<typeof videoCourseSchema>>) {
   const partialSchema = videoCourseSchema.partial();
   const validation = partialSchema.safeParse(data);
+
   if (!validation.success) {
     return { success: false, message: "Invalid course data for update.", errors: validation.error.flatten().fieldErrors };
   }
   if (Object.keys(validation.data).length === 0) {
     return { success: false, message: "No data provided for update." };
   }
+
   try {
     const courseRef = doc(db, 'videoCourses', id);
-    await updateDoc(courseRef, {
-      ...validation.data,
-      updatedAt: serverTimestamp(),
-    });
+    const currentDocSnap = await getDoc(courseRef);
+    if (!currentDocSnap.exists()) {
+      return { success: false, message: "Course not found." };
+    }
+    const currentData = currentDocSnap.data() as Video;
+
+    const updatedPayload: Record<string, any> = { ...validation.data };
+
+    // Recalculate finalPriceArs if priceArs or discountInput changes
+    const newPriceArs = data.priceArs !== undefined ? data.priceArs : currentData.priceArs;
+    const newDiscountInput = data.discountInput !== undefined ? data.discountInput : currentData.discountInput;
+
+    if (data.priceArs !== undefined || data.discountInput !== undefined) {
+      const { finalPrice, processedDiscountValueForStorage } = calculateCoursePrices(newPriceArs, newDiscountInput);
+      updatedPayload.priceArs = newPriceArs; // Ensure original price is updated if changed
+      updatedPayload.discountInput = processedDiscountValueForStorage;
+      updatedPayload.finalPriceArs = finalPrice;
+    }
+    
+    updatedPayload.updatedAt = serverTimestamp();
+
+    await updateDoc(courseRef, updatedPayload);
     return { success: true, message: "Course updated successfully." };
   } catch (error) {
     console.error('Error updating video course:', error);
@@ -696,8 +769,8 @@ export async function incrementVideoCourseViews(videoId: string): Promise<{ succ
   try {
     const courseRef = doc(db, 'videoCourses', videoId);
     await updateDoc(courseRef, {
-      views: increment(1), // Atomically increments the 'views' field
-      updatedAt: serverTimestamp() // Optionally update the timestamp if needed
+      views: increment(1),
+      updatedAt: serverTimestamp()
     });
     return { success: true };
   } catch (error) {
@@ -720,6 +793,8 @@ export async function getVideoCourseById(id: string): Promise<Video | null> {
         previewImageUrl: data.previewImageUrl,
         videoUrl: data.videoUrl,
         priceArs: data.priceArs,
+        discountInput: data.discountInput,
+        finalPriceArs: data.finalPriceArs,
         duration: data.duration,
         order: data.order || 0,
         views: data.views || 0,
@@ -744,11 +819,19 @@ const socialLinkSchemaDb = z.object({
 });
 
 const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-const lucideIconNames = ['Paperclip', 'Smile', 'Moon', 'Sun', 'Phone', 'Send', 'HelpCircle', 'MessageCircle', 'ThumbsUp', 'Heart', 'Star', 'Bell']; 
+
+const colorSettingSchemaDb = z.object({
+  id: z.string(),
+  labelKey: z.string(),
+  cssVar: z.string(),
+  defaultValueHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid 6-digit HEX color"),
+  value: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid 6-digit HEX color"),
+});
 
 const siteSettingsInternalSchema = z.object({
   siteTitle: z.string().default("Aurum Media"),
   siteIconUrl: z.string().url().optional().or(z.literal('')).default(""),
+  headerIconUrl: z.string().url().optional().or(z.literal('')).default(""),
   maintenanceMode: z.boolean().default(false),
   defaultLanguage: z.enum(['en', 'es']).default('es'),
   allowUserToChooseLanguage: z.boolean().default(true),
@@ -768,11 +851,13 @@ const siteSettingsInternalSchema = z.object({
     usdToArs: z.number().positive().default(1000),
     eurToArs: z.number().positive().default(1100),
   }).default({ usdToArs: 1000, eurToArs: 1100 }),
+  themeColors: z.array(colorSettingSchemaDb).default(() => defaultThemeColorsHex.map(c => ({...c}))),
   heroTitle: z.string().default("Descubre Aurum Media"),
   heroSubtitle: z.string().default("Sumérgete en una colección curada de contenido de video premium, diseñado para inspirar y cautivar."),
   liveStreamDefaultTitle: z.string().default("Evento en Vivo"),
   liveStreamOfflineMessage: z.string().default("La transmisión en vivo está actualmente desconectada. ¡Vuelve pronto!"),
   socialLinks: z.array(socialLinkSchemaDb).default([]),
+  testimonialMediaOptions: z.enum(['none', 'photos', 'videos', 'both']).default('both'),
   updatedAt: z.custom<Timestamp>((val) => val instanceof Timestamp).optional(),
   whatsAppEnabled: z.boolean().default(false),
   whatsAppPhoneNumber: z.string()
@@ -787,11 +872,15 @@ const siteSettingsInternalSchema = z.object({
   whatsAppIconSize: z.number().int().positive().default(28),
   aiCurationEnabled: z.boolean().default(true),
   aiCurationMinTestimonials: z.number().int().min(0).default(5),
+  headerDisplayMode: z.enum(['logo', 'title', 'both']).default('both'),
+  footerDisplayMode: z.enum(['logo', 'title', 'both']).default('logo'),
+  footerLogoSize: z.number().int().positive().optional().default(64),
 });
 
 const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
   siteTitle: "Aurum Media",
   siteIconUrl: "",
+  headerIconUrl: "",
   maintenanceMode: false,
   defaultLanguage: 'es',
   allowUserToChooseLanguage: true,
@@ -802,6 +891,7 @@ const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
   ],
   allowUserToChooseCurrency: true,
   exchangeRates: { usdToArs: 1000, eurToArs: 1100 },
+  themeColors: defaultThemeColorsHex.map(c => ({...c})), 
   heroTitle: "Descubre Aurum Media",
   heroSubtitle: "Sumérgete en una colección curada de contenido de video premium, diseñado para inspirar y cautivar.",
   liveStreamDefaultTitle: "Evento en Vivo",
@@ -810,6 +900,7 @@ const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
     { id: `social-${Date.now()}-fb`, name: 'Facebook', url: '', iconName: 'Facebook' },
     { id: `social-${Date.now()}-ig`, name: 'Instagram', url: '', iconName: 'Instagram' },
   ],
+  testimonialMediaOptions: 'both',
   whatsAppEnabled: false,
   whatsAppPhoneNumber: "",
   whatsAppDefaultMessage: "Hola! Estoy interesado en sus servicios.",
@@ -819,10 +910,9 @@ const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
   whatsAppIconSize: 28,
   aiCurationEnabled: true,
   aiCurationMinTestimonials: 5,
-};
-const defaultSiteSettings: SiteSettings = {
-    ...siteSettingsInternalSchema.parse(defaultSiteSettingsInput),
-    updatedAt: new Date().toISOString(),
+  headerDisplayMode: 'both',
+  footerDisplayMode: 'logo',
+  footerLogoSize: 64,
 };
 
 
@@ -831,42 +921,90 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     const settingsRef = doc(db, 'siteSettings', siteSettingsDocId);
     const docSnap = await getDoc(settingsRef);
 
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      const mergedWithDefaults = { ...defaultSiteSettingsInput, ...data };
+    let currentData = defaultSiteSettingsInput;
+    let needsUpdateInDb = false;
 
-      if (!Array.isArray(mergedWithDefaults.socialLinks)) {
-        mergedWithDefaults.socialLinks = defaultSiteSettingsInput.socialLinks || [];
-      }
-      mergedWithDefaults.socialLinks = mergedWithDefaults.socialLinks.map((link, index) => ({
-        id: link.id || `social-${Date.now()}-${index}`, 
-        ...link,
-      }));
-      
-      const parsedData = siteSettingsInternalSchema.parse(mergedWithDefaults);
-      return {
-        ...parsedData,
-        updatedAt: (parsedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-      };
+    if (docSnap.exists()) {
+      currentData = { ...defaultSiteSettingsInput, ...docSnap.data() };
     } else {
-      const dataToSet = { ...defaultSiteSettingsInput, updatedAt: serverTimestamp() };
-      dataToSet.socialLinks = (dataToSet.socialLinks || []).map((link, index) => ({
-        id: link.id || `social-default-${Date.now()}-${index}`, 
-        ...link,
-      }));
-      await setDoc(settingsRef, dataToSet);
-      console.log("Created default site settings in Firestore.");
-      const parsedDefaultData = siteSettingsInternalSchema.parse(dataToSet);
-      return {
-        ...parsedDefaultData,
-        updatedAt: new Date().toISOString(), 
-      };
+      needsUpdateInDb = true; 
     }
+
+    let finalThemeColors = [...defaultThemeColorsHex.map(c => ({...c, value: c.defaultValueHex }))]; 
+
+    if (currentData.themeColors && Array.isArray(currentData.themeColors) && currentData.themeColors.length > 0) {
+      const existingColorsMap = new Map(currentData.themeColors.map(c => [c.id, c]));
+      finalThemeColors = defaultThemeColorsHex.map(defaultColor => {
+        const existingColor = existingColorsMap.get(defaultColor.id);
+        return {
+          ...defaultColor,
+          value: existingColor?.value && /^#[0-9A-Fa-f]{6}$/.test(existingColor.value) ? existingColor.value : defaultColor.defaultValueHex,
+        };
+      });
+      if (currentData.themeColors.length !== defaultThemeColorsHex.length ||
+          !currentData.themeColors.every((c: ColorSetting) => defaultThemeColorsHex.find(dc => dc.id === c.id))) {
+          needsUpdateInDb = true;
+      } else {
+          for (const color of currentData.themeColors) {
+              if (!/^#[0-9A-Fa-f]{6}$/.test(color.value)) {
+                  needsUpdateInDb = true;
+                  break;
+              }
+          }
+      }
+
+    } else {
+      needsUpdateInDb = true; 
+    }
+    currentData.themeColors = finalThemeColors;
+
+
+    if (!Array.isArray(currentData.socialLinks)) {
+        currentData.socialLinks = defaultSiteSettingsInput.socialLinks || [];
+        needsUpdateInDb = true;
+    }
+    currentData.socialLinks = currentData.socialLinks.map((link, index) => {
+        if (!link.id) needsUpdateInDb = true;
+        return {
+            id: link.id || `social-${Date.now()}-${index}`,
+            ...link,
+        }
+    });
+    
+    if (currentData.footerLogoSize === undefined || typeof currentData.footerLogoSize !== 'number' || currentData.footerLogoSize <= 0) {
+        currentData.footerLogoSize = defaultSiteSettingsInput.footerLogoSize;
+        needsUpdateInDb = true;
+    }
+    
+    if (currentData.headerIconUrl === undefined) {
+        currentData.headerIconUrl = defaultSiteSettingsInput.headerIconUrl;
+        needsUpdateInDb = true;
+    }
+    
+    if (!currentData.testimonialMediaOptions) {
+        currentData.testimonialMediaOptions = defaultSiteSettingsInput.testimonialMediaOptions;
+        needsUpdateInDb = true;
+    }
+
+
+    if (needsUpdateInDb) {
+        const dataToSet = { ...siteSettingsInternalSchema.parse(currentData), updatedAt: serverTimestamp() };
+        await setDoc(settingsRef, dataToSet);
+        console.log("Site settings initialized or updated with defaults in Firestore.");
+    }
+    
+    const parsedData = siteSettingsInternalSchema.parse(currentData);
+    return {
+      ...parsedData,
+      updatedAt: (parsedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+    };
+
   } catch (error) {
     console.error('Error fetching or creating site settings:', error);
     const fallbackSettings = siteSettingsInternalSchema.parse(defaultSiteSettingsInput);
+    fallbackSettings.themeColors = defaultThemeColorsHex.map(c => ({...c}));
     fallbackSettings.socialLinks = (fallbackSettings.socialLinks || []).map((link, index) => ({
-        id: link.id || `social-fallback-${Date.now()}-${index}`, 
+        id: link.id || `social-fallback-${Date.now()}-${index}`,
         ...link,
     }));
     return {
@@ -876,7 +1014,7 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   }
 }
 
-export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updatedAt' | 'socialLinks'> & { socialLinks?: SocialLink[] }>) {
+export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updatedAt' | 'socialLinks' | 'themeColors'> & { socialLinks?: SocialLink[], themeColors?: ColorSetting[] }>) {
   if (Object.keys(data).length === 0) {
     return { success: false, message: "No settings data provided for update." };
   }
@@ -887,19 +1025,24 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
 
     if (data.exchangeRates) {
         updateData.exchangeRates = {
-            usdToArs: Number(data.exchangeRates.usdToArs) || defaultSiteSettings.exchangeRates.usdToArs,
-            eurToArs: Number(data.exchangeRates.eurToArs) || defaultSiteSettings.exchangeRates.eurToArs,
+            usdToArs: Number(data.exchangeRates.usdToArs) || defaultSiteSettingsInput.exchangeRates.usdToArs,
+            eurToArs: Number(data.exchangeRates.eurToArs) || defaultSiteSettingsInput.exchangeRates.eurToArs,
         };
     }
     if (data.whatsAppButtonSize) updateData.whatsAppButtonSize = Number(data.whatsAppButtonSize);
     if (data.whatsAppIconSize) updateData.whatsAppIconSize = Number(data.whatsAppIconSize);
     if (data.aiCurationMinTestimonials !== undefined) {
       const minTestimonials = Number(data.aiCurationMinTestimonials);
-      updateData.aiCurationMinTestimonials = isNaN(minTestimonials) || minTestimonials < 0 ? defaultSiteSettings.aiCurationMinTestimonials : minTestimonials;
+      updateData.aiCurationMinTestimonials = isNaN(minTestimonials) || minTestimonials < 0 ? defaultSiteSettingsInput.aiCurationMinTestimonials : minTestimonials;
     }
-    
+     if (data.footerLogoSize !== undefined) {
+      const logoSize = Number(data.footerLogoSize);
+      updateData.footerLogoSize = isNaN(logoSize) || logoSize <= 0 ? defaultSiteSettingsInput.footerLogoSize : logoSize;
+    }
+
+
     if (data.activeCurrencies && !Array.isArray(data.activeCurrencies)) {
-        delete updateData.activeCurrencies; 
+        delete updateData.activeCurrencies;
     }
     if (data.socialLinks && Array.isArray(data.socialLinks)) {
       updateData.socialLinks = data.socialLinks.map((link, index) => ({
@@ -907,20 +1050,35 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
         name: link.name || '',
         url: link.url || '',
         iconName: link.iconName || '',
-      })).filter(link => link.name.trim() !== '' || link.url.trim() !== ''); 
+      })).filter(link => link.name.trim() !== '' || link.url.trim() !== '');
+    }
+    if (data.themeColors && Array.isArray(data.themeColors)) {
+      updateData.themeColors = data.themeColors.map(tc => ({
+          id: tc.id,
+          labelKey: tc.labelKey,
+          cssVar: tc.cssVar,
+          defaultValueHex: tc.defaultValueHex,
+          value: /^#[0-9A-Fa-f]{6}$/.test(tc.value) ? tc.value : tc.defaultValueHex, 
+      }));
+    }
+    
+    if (data.testimonialMediaOptions && ['none', 'photos', 'videos', 'both'].includes(data.testimonialMediaOptions)) {
+        updateData.testimonialMediaOptions = data.testimonialMediaOptions;
+    } else if (data.hasOwnProperty('testimonialMediaOptions')) { 
+        delete updateData.testimonialMediaOptions; 
     }
 
 
     updateData.updatedAt = serverTimestamp();
 
-    await setDoc(settingsRef, updateData, { merge: true }); 
+    await setDoc(settingsRef, updateData, { merge: true });
 
     const updatedSettingsSnap = await getDoc(settingsRef);
-    let fullUpdatedSettings: SiteSettings = { ...defaultSiteSettings, ...updateData, updatedAt: new Date().toISOString() }; 
+    let fullUpdatedSettings: SiteSettings = { ...defaultSiteSettingsInput, themeColors: defaultThemeColorsHex.map(c=>({...c})), ...updateData, updatedAt: new Date().toISOString() };
 
     if (updatedSettingsSnap.exists()) {
         const updatedDataFromDb = updatedSettingsSnap.data();
-        const mergedData = { ...defaultSiteSettingsInput, ...updatedDataFromDb }; 
+        const mergedData = { ...defaultSiteSettingsInput, ...updatedDataFromDb };
         if (!Array.isArray(mergedData.socialLinks)) {
             mergedData.socialLinks = defaultSiteSettingsInput.socialLinks || [];
         }
@@ -928,6 +1086,30 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
           id: link.id || `db-social-${Date.now()}-${index}`,
           ...link,
         }));
+
+        if (!Array.isArray(mergedData.themeColors) || mergedData.themeColors.length === 0) {
+            mergedData.themeColors = defaultThemeColorsHex.map(c=>({...c}));
+        } else {
+             const dbColorsMap = new Map(mergedData.themeColors.map((c: ColorSetting) => [c.id, c]));
+             mergedData.themeColors = defaultThemeColorsHex.map(defaultColor => {
+                 const dbColor = dbColorsMap.get(defaultColor.id);
+                 return {
+                     ...defaultColor,
+                     value: dbColor?.value && /^#[0-9A-Fa-f]{6}$/.test(dbColor.value) ? dbColor.value : defaultColor.defaultValueHex,
+                 };
+             });
+        }
+        
+        if (mergedData.footerLogoSize === undefined || typeof mergedData.footerLogoSize !== 'number' || mergedData.footerLogoSize <= 0) {
+            mergedData.footerLogoSize = defaultSiteSettingsInput.footerLogoSize;
+        }
+        if (mergedData.headerIconUrl === undefined) {
+            mergedData.headerIconUrl = defaultSiteSettingsInput.headerIconUrl;
+        }
+        if (!mergedData.testimonialMediaOptions) {
+            mergedData.testimonialMediaOptions = defaultSiteSettingsInput.testimonialMediaOptions;
+        }
+
         const parsedData = siteSettingsInternalSchema.parse(mergedData);
         fullUpdatedSettings = {
             ...parsedData,
@@ -957,6 +1139,7 @@ const announcementSchemaBase = z.object({
     invalid_type_error: "That's not a valid date!",
   }),
   isActive: z.boolean().default(true),
+  showOnce: z.boolean().default(false).optional(),
 });
 
 const announcementSchema = announcementSchemaBase.superRefine((data, ctx) => {
@@ -985,7 +1168,8 @@ export async function createAnnouncement(data: z.infer<typeof announcementSchema
   try {
     const docRef = await addDoc(collection(db, 'announcements'), {
       ...validation.data,
-      expiryDate: Timestamp.fromDate(validation.data.expiryDate), 
+      showOnce: validation.data.showOnce ?? false,
+      expiryDate: Timestamp.fromDate(validation.data.expiryDate),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -1007,8 +1191,8 @@ export async function getAnnouncements(filters?: { activeOnly?: boolean, nonExpi
       conditions.push(where('expiryDate', '>=', Timestamp.now()));
     }
 
-    const q = query(announcementsCol, ...conditions, orderBy('updatedAt', 'desc')); 
-    
+    const q = query(announcementsCol, ...conditions, orderBy('updatedAt', 'desc'));
+
     const querySnapshot = await getDocs(q);
     const announcements: Announcement[] = [];
     querySnapshot.forEach((docSnap) => {
@@ -1020,8 +1204,9 @@ export async function getAnnouncements(filters?: { activeOnly?: boolean, nonExpi
         text: data.text,
         imageUrl: data.imageUrl,
         videoUrl: data.videoUrl,
-        expiryDate: (data.expiryDate as Timestamp)?.toDate().toISOString(), 
+        expiryDate: (data.expiryDate as Timestamp)?.toDate().toISOString(),
         isActive: data.isActive,
+        showOnce: data.showOnce ?? false,
         createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
         updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
       } as Announcement);
@@ -1053,6 +1238,13 @@ export async function updateAnnouncement(id: string, data: Partial<Omit<z.input<
         mergedInputData.expiryDate = data.expiryDate;
     }
     
+    if (data.showOnce !== undefined) {
+        mergedInputData.showOnce = data.showOnce;
+    } else if (currentData.showOnce === undefined) {
+        mergedInputData.showOnce = false; 
+    }
+
+
     const validation = announcementSchema.safeParse(mergedInputData);
 
     if (!validation.success) {
@@ -1064,13 +1256,15 @@ export async function updateAnnouncement(id: string, data: Partial<Omit<z.input<
       if (Object.prototype.hasOwnProperty.call(data, key)) {
         if (key === 'expiryDate' && validation.data.expiryDate) {
           updatePayload[key] = Timestamp.fromDate(validation.data.expiryDate);
+        } else if (key === 'showOnce') {
+          updatePayload[key] = validation.data.showOnce ?? false;
         } else if (key !== 'expiryDate') {
-           // @ts-ignore 
+           // @ts-ignore
            updatePayload[key] = validation.data[key];
         }
       }
     }
-    
+
     if (Object.keys(updatePayload).length === 0) {
       return { success: false, message: "No data provided for update." };
     }
@@ -1100,3 +1294,40 @@ export async function deleteAnnouncement(id: string) {
   }
 }
 
+// Dashboard Stats Actions
+async function getCollectionCount(collectionName: string, conditions: any[] = []): Promise<number> {
+  try {
+    const collRef = collection(db, collectionName);
+    const q = query(collRef, ...conditions);
+    const snapshot = await getDocs(q);
+    return snapshot.size;
+  } catch (error) {
+    console.error(`Error counting documents in ${collectionName}:`, error);
+    return 0;
+  }
+}
+export async function getDashboardStats(): Promise<DashboardStats> {
+  try {
+    const [totalCourses, pendingTestimonials, activeUsers, totalUsers] = await Promise.all([
+      getCollectionCount('videoCourses'),
+      getCollectionCount('testimonials', [where('status', '==', 'pending')]),
+      getCollectionCount('users', [where('isActive', '==', true), where('role', '!=', 'admin')]),
+      getCollectionCount('users', [where('role', '!=', 'admin')])
+    ]);
+
+    return {
+      totalCourses,
+      pendingTestimonials,
+      activeUsers,
+      totalUsers
+    };
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
+    return { 
+      totalCourses: 0,
+      pendingTestimonials: 0,
+      activeUsers: 0,
+      totalUsers: 0
+    };
+  }
+}

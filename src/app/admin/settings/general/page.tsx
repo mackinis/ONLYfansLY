@@ -11,10 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from "@/components/ui/switch";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as ShadFormDescription } from "@/components/ui/form";
-import { Settings2, Save, Loader2, PlusCircle, Trash2, Link as LinkIcon, Sparkles, Info } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Settings2, Save, Loader2, PlusCircle, Trash2, Link as LinkIcon, Sparkles, Info, Image as ImageIconLucide, Heading1, Ruler, Image as ImageIconShadcn, Camera, Video, दोनों, Ban } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { updateSiteSettings } from '@/lib/actions';
-import type { SiteSettings, SocialLink } from '@/lib/types';
+import type { SiteSettings, SocialLink, HeaderDisplayMode, FooterDisplayMode, TestimonialMediaOption } from '@/lib/types';
 import { useTranslation } from '@/context/I18nContext';
 import { Separator } from '@/components/ui/separator';
 
@@ -27,13 +28,18 @@ const socialLinkSchema = z.object({
 
 const siteSettingsFormSchema = z.object({
   siteTitle: z.string().min(1, { message: "Site title cannot be empty." }),
-  siteIconUrl: z.string().url({ message: "Must be a valid URL."}).optional().or(z.literal('')),
+  siteIconUrl: z.string().url({ message: "Must be a valid URL."}).optional().or(z.literal('')), // Favicon / General Icon
+  headerIconUrl: z.string().url({ message: "Must be a valid URL."}).optional().or(z.literal('')), // Header specific Icon
   heroTitle: z.string().min(1, { message: "Hero title cannot be empty." }),
   heroSubtitle: z.string().min(1, { message: "Hero subtitle cannot be empty." }),
   maintenanceMode: z.boolean(),
   socialLinks: z.array(socialLinkSchema).optional().default([]),
   aiCurationEnabled: z.boolean().default(true),
   aiCurationMinTestimonials: z.coerce.number().int().min(0, { message: "Minimum must be 0 or greater."}).default(5),
+  headerDisplayMode: z.enum(['logo', 'title', 'both']).default('both'),
+  footerDisplayMode: z.enum(['logo', 'title', 'both']).default('logo'),
+  footerLogoSize: z.coerce.number().int().positive({message: "Must be a positive integer."}).min(16, {message: "Size must be at least 16px."}).max(200, {message: "Size cannot exceed 200px."}).default(64),
+  testimonialMediaOptions: z.enum(['none', 'photos', 'videos', 'both']).default('both'),
 });
 
 type SiteSettingsFormValues = z.infer<typeof siteSettingsFormSchema>;
@@ -48,12 +54,17 @@ export default function AdminGeneralSettingsPage() {
     defaultValues: {
       siteTitle: 'Aurum Media',
       siteIconUrl: '',
+      headerIconUrl: '',
       heroTitle: 'Discover Aurum Media',
       heroSubtitle: 'Immerse yourself in a curated collection of premium video content, designed to inspire and captivate.',
       maintenanceMode: false,
       socialLinks: [],
       aiCurationEnabled: true,
       aiCurationMinTestimonials: 5,
+      headerDisplayMode: 'both',
+      footerDisplayMode: 'logo',
+      footerLogoSize: 64,
+      testimonialMediaOptions: 'both',
     },
   });
 
@@ -67,17 +78,22 @@ export default function AdminGeneralSettingsPage() {
       form.reset({
         siteTitle: currentGlobalSettings.siteTitle || 'Aurum Media',
         siteIconUrl: currentGlobalSettings.siteIconUrl || '',
+        headerIconUrl: currentGlobalSettings.headerIconUrl || '',
         heroTitle: currentGlobalSettings.heroTitle || 'Discover Aurum Media',
         heroSubtitle: currentGlobalSettings.heroSubtitle || 'Immerse yourself in a curated collection of premium video content, designed to inspire and captivate.',
         maintenanceMode: currentGlobalSettings.maintenanceMode || false,
         socialLinks: (currentGlobalSettings.socialLinks || []).map(link => ({
-          id: link.id || `social-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Ensure ID exists
+          id: link.id || `social-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           name: link.name,
           url: link.url,
           iconName: link.iconName
         })),
         aiCurationEnabled: currentGlobalSettings.aiCurationEnabled !== undefined ? currentGlobalSettings.aiCurationEnabled : true,
         aiCurationMinTestimonials: currentGlobalSettings.aiCurationMinTestimonials !== undefined ? currentGlobalSettings.aiCurationMinTestimonials : 5,
+        headerDisplayMode: currentGlobalSettings.headerDisplayMode || 'both',
+        footerDisplayMode: currentGlobalSettings.footerDisplayMode || 'logo',
+        footerLogoSize: currentGlobalSettings.footerLogoSize || 64,
+        testimonialMediaOptions: currentGlobalSettings.testimonialMediaOptions || 'both',
       });
     }
   }, [currentGlobalSettings, form]);
@@ -93,12 +109,17 @@ export default function AdminGeneralSettingsPage() {
       const result = await updateSiteSettings({
           siteTitle: data.siteTitle,
           siteIconUrl: data.siteIconUrl,
+          headerIconUrl: data.headerIconUrl,
           heroTitle: data.heroTitle,
           heroSubtitle: data.heroSubtitle,
           maintenanceMode: data.maintenanceMode,
           socialLinks: socialLinksToSave,
           aiCurationEnabled: data.aiCurationEnabled,
           aiCurationMinTestimonials: data.aiCurationMinTestimonials,
+          headerDisplayMode: data.headerDisplayMode,
+          footerDisplayMode: data.footerDisplayMode,
+          footerLogoSize: data.footerLogoSize,
+          testimonialMediaOptions: data.testimonialMediaOptions,
       });
 
       if (result.success && result.updatedSettings) {
@@ -136,7 +157,6 @@ export default function AdminGeneralSettingsPage() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <CardContent className="space-y-6 max-h-[75vh] overflow-y-auto pr-3">
-              {/* Basic Site Info */}
               <FormField control={form.control} name="siteTitle" render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t('adminGeneralPage.form.siteTitle')}</FormLabel>
@@ -149,8 +169,17 @@ export default function AdminGeneralSettingsPage() {
               <FormField control={form.control} name="siteIconUrl" render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t('adminGeneralPage.form.siteIconUrl')}</FormLabel>
-                  <FormControl><Input placeholder="https://example.com/icon.png" {...field} /></FormControl>
+                  <FormControl><Input placeholder="https://example.com/favicon.ico" {...field} /></FormControl>
                   <ShadFormDescription>{t('adminGeneralPage.form.siteIconUrlDescription')}</ShadFormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="headerIconUrl" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('adminGeneralPage.form.headerIconUrl')}</FormLabel>
+                  <FormControl><Input placeholder="https://example.com/header-logo.png" {...field} /></FormControl>
+                  <ShadFormDescription>{t('adminGeneralPage.form.headerIconUrlDescription')}</ShadFormDescription>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -160,7 +189,59 @@ export default function AdminGeneralSettingsPage() {
               
               <Separator className="my-6" />
 
-              {/* Homepage Hero Settings */}
+               <h3 className="text-lg font-medium text-primary flex items-center">
+                <ImageIconShadcn className="mr-2 h-5 w-5" /> {t('adminGeneralPage.form.headerDisplayModeTitle')}
+              </h3>
+              <ShadFormDescription className="mb-2">{t('adminGeneralPage.form.headerDisplayModeDescription')}</ShadFormDescription>
+              <FormField control={form.control} name="headerDisplayMode" render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <FormControl>
+                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
+                      <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="logo" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeLogoOnly')}</FormLabel></FormItem>
+                      <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="title" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeTitleOnly')}</FormLabel></FormItem>
+                      <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="both" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeBoth')}</FormLabel></FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <Separator className="my-6" />
+
+              <h3 className="text-lg font-medium text-primary flex items-center">
+                 <Heading1 className="mr-2 h-5 w-5" /> {t('adminGeneralPage.form.footerDisplayModeTitle')}
+              </h3>
+              <ShadFormDescription className="mb-2">{t('adminGeneralPage.form.footerDisplayModeDescription')}</ShadFormDescription>
+              <FormField control={form.control} name="footerDisplayMode" render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <FormControl>
+                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
+                       <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="logo" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeLogoOnly')}</FormLabel></FormItem>
+                      <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="title" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeTitleOnly')}</FormLabel></FormItem>
+                      <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="both" /></FormControl><FormLabel className="font-normal">{t('adminGeneralPage.form.displayModeBoth')}</FormLabel></FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              
+              <FormField control={form.control} name="footerLogoSize" render={({ field }) => (
+                <FormItem className="mt-4">
+                    <FormLabel className="flex items-center">
+                        <Ruler className="mr-2 h-4 w-4 text-muted-foreground"/>
+                        {t('adminGeneralPage.form.footerLogoSize')}
+                    </FormLabel>
+                    <FormControl>
+                        <Input type="number" placeholder="64" {...field} onChange={event => field.onChange(+event.target.value)} />
+                    </FormControl>
+                    <ShadFormDescription>{t('adminGeneralPage.form.footerLogoSizeDescription')}</ShadFormDescription>
+                    <FormMessage />
+                </FormItem>
+              )} />
+
+
+              <Separator className="my-6" />
+
               <h3 className="text-lg font-medium text-primary">{t('adminGeneralPage.form.heroSettingsTitle')}</h3>
               <FormField control={form.control} name="heroTitle" render={({ field }) => (
                 <FormItem>
@@ -182,7 +263,6 @@ export default function AdminGeneralSettingsPage() {
 
               <Separator className="my-6" />
               
-              {/* Social Media Links */}
               <div>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium text-primary">{t('adminGeneralPage.form.socialMediaTitle')}</h3>
@@ -227,7 +307,6 @@ export default function AdminGeneralSettingsPage() {
 
               <Separator className="my-6" />
               
-              {/* AI Testimonial Curation Settings */}
               <h3 className="text-lg font-medium text-primary flex items-center">
                 <Sparkles className="mr-2 h-5 w-5" /> {t('adminGeneralPage.form.aiCurationTitle')}
               </h3>
@@ -258,8 +337,39 @@ export default function AdminGeneralSettingsPage() {
               )} />
 
               <Separator className="my-6" />
+              
+              <h3 className="text-lg font-medium text-primary flex items-center">
+                <ImageIconLucide className="mr-2 h-5 w-5" /> {t('adminGeneralPage.form.testimonialMediaOptionsTitle')}
+              </h3>
+              <ShadFormDescription className="mb-2">{t('adminGeneralPage.form.testimonialMediaOptionsDescription')}</ShadFormDescription>
+              <FormField control={form.control} name="testimonialMediaOptions" render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <FormControl>
+                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0">
+                      <FormItem className="flex items-center space-x-2">
+                        <FormControl><RadioGroupItem value="none" /></FormControl>
+                        <FormLabel className="font-normal">{t('adminGeneralPage.form.mediaOptionNone')}</FormLabel>
+                      </FormItem>
+                       <FormItem className="flex items-center space-x-2">
+                        <FormControl><RadioGroupItem value="photos" /></FormControl>
+                        <FormLabel className="font-normal">{t('adminGeneralPage.form.mediaOptionPhotos')}</FormLabel>
+                      </FormItem>
+                       <FormItem className="flex items-center space-x-2">
+                        <FormControl><RadioGroupItem value="videos" /></FormControl>
+                        <FormLabel className="font-normal">{t('adminGeneralPage.form.mediaOptionVideos')}</FormLabel>
+                      </FormItem>
+                       <FormItem className="flex items-center space-x-2">
+                        <FormControl><RadioGroupItem value="both" /></FormControl>
+                        <FormLabel className="font-normal">{t('adminGeneralPage.form.mediaOptionBoth')}</FormLabel>
+                      </FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              {/* Maintenance Mode */}
+              <Separator className="my-6" />
+
               <FormField control={form.control} name="maintenanceMode" render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                   <div className="space-y-0.5">

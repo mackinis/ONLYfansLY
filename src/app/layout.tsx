@@ -1,19 +1,72 @@
 
-'use client'; // Required because we're using a hook (useTranslation) for dynamic title/icon
+'use client';
 
-// import type { Metadata } from 'next'; // Metadata type is not used for static export here
 import { Toaster } from "@/components/ui/toaster";
 import { I18nProvider, useTranslation } from '@/context/I18nContext';
 import './globals.css';
-import { useEffect } from 'react';
-import WhatsAppChatButton from '@/components/WhatsAppChatButton'; // Import the WhatsApp button
+import { useEffect, useState, useCallback } from 'react';
+import WhatsAppChatButton from '@/components/WhatsAppChatButton';
+import { usePathname, useRouter } from 'next/navigation';
+import { type ColorSetting, defaultThemeColorsHex } from '@/lib/config';
+import { hexToHslString } from '@/lib/utils';
 
-// Component to dynamically set title and icon
-function DynamicMetadata() {
-  const { currentSiteTitle, currentSiteIconUrl } = useTranslation();
+function applyThemeToDocumentFromSettings(themeColors?: ColorSetting[]) {
+  const colorsToApply = (themeColors && themeColors.length > 0)
+    ? themeColors
+    : defaultThemeColorsHex.map(c => ({ ...c, value: c.defaultValueHex }));
+
+  colorsToApply.forEach(color => {
+    // Ensure 'value' is a valid HEX before conversion, otherwise use defaultValueHex
+    const hexValue = /^#[0-9A-Fa-f]{6}$/.test(color.value) ? color.value : color.defaultValueHex;
+    const hslValue = hexToHslString(hexValue);
+    document.documentElement.style.setProperty(color.cssVar, hslValue);
+  });
+}
+
+function DynamicMetadataAndMaintenance() {
+  const { currentSiteTitle, currentSiteIconUrl, siteSettings, isLoadingSettings } = useTranslation();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
 
   useEffect(() => {
-    document.title = currentSiteTitle || 'Aurum Media'; // Fallback title
+    if (!isLoadingSettings && siteSettings?.themeColors) {
+      applyThemeToDocumentFromSettings(siteSettings.themeColors);
+    } else if (!isLoadingSettings && !siteSettings?.themeColors) {
+      // This case should ideally be handled by getSiteSettings initializing themeColors
+      applyThemeToDocumentFromSettings(defaultThemeColorsHex.map(c => ({...c, value: c.defaultValueHex })));
+    }
+  }, [siteSettings, isLoadingSettings]);
+
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const checkAdminStatus = () => {
+        const adminLoggedIn = sessionStorage.getItem('aurum_is_admin_logged_in') === 'true';
+        setIsAdminLoggedIn(adminLoggedIn);
+      };
+      checkAdminStatus();
+
+      window.addEventListener('aurumLoginStatusChanged', checkAdminStatus);
+      window.addEventListener('storage', (event) => {
+        if (event.key === 'aurum_is_admin_logged_in') {
+          checkAdminStatus();
+        }
+      });
+
+      return () => {
+        window.removeEventListener('aurumLoginStatusChanged', checkAdminStatus);
+        window.removeEventListener('storage', (event) => {
+          if (event.key === 'aurum_is_admin_logged_in') {
+            checkAdminStatus();
+          }
+        });
+      };
+    }
+  }, []);
+
+  useEffect(() => {
+    document.title = currentSiteTitle || 'Aurum Media';
 
     let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
     if (!link) {
@@ -24,17 +77,26 @@ function DynamicMetadata() {
     if (currentSiteIconUrl) {
       link.href = currentSiteIconUrl;
     } else {
-      // Fallback icon, ensure you have a favicon.ico in /public
       link.href = '/favicon.ico';
     }
   }, [currentSiteTitle, currentSiteIconUrl]);
 
-  return null; // This component doesn't render anything itself
+  useEffect(() => {
+    if (!isLoadingSettings && siteSettings?.maintenanceMode) {
+      const allowedPaths = ['/maintenance', '/login'];
+      const isAdminArea = pathname.startsWith('/admin');
+
+      const isPathCurrentlyAllowed = allowedPaths.includes(pathname) || isAdminArea;
+
+      if (!isPathCurrentlyAllowed && !isAdminLoggedIn) {
+        router.replace('/maintenance');
+      }
+    }
+  }, [siteSettings, isLoadingSettings, pathname, router, isAdminLoggedIn]);
+
+  return null;
 }
 
-// Static metadata export is removed as this is a client component.
-// SEO metadata like description can be added directly in the <head> below if static,
-// or managed by DynamicMetadata if it needs to be dynamic.
 
 export default function RootLayout({
   children,
@@ -44,11 +106,6 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        {/* 
-          The <title> and <link rel="icon"> tags are managed by the DynamicMetadata component.
-          You can add other static meta tags here if needed, e.g.:
-          <meta name="description" content="Luxury Video Streaming and Content Platform" />
-        */}
         <meta name="description" content="Luxury Video Streaming and Content Platform" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -56,10 +113,10 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col">
         <I18nProvider>
-          <DynamicMetadata /> {/* Component to handle dynamic title and icon */}
+          <DynamicMetadataAndMaintenance />
           {children}
           <Toaster />
-          <WhatsAppChatButton /> {/* Add the WhatsApp button here */}
+          <WhatsAppChatButton />
         </I18nProvider>
       </body>
     </html>

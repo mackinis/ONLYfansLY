@@ -32,31 +32,40 @@ export default function CurrenciesAdminPage() {
 
   const initializeLocalState = useCallback(() => {
     if (currentGlobalSettings) {
-      setLocalActiveCurrencies(
-        SUPPORTED_CURRENCIES.map(def => {
-          const activeSetting = currentGlobalSettings.activeCurrencies.find(ac => ac.id === def.id);
-          return {
-            id: def.id,
-            code: def.code,
-            name: def.name,
-            symbol: def.symbol,
-            isPrimary: activeSetting ? activeSetting.isPrimary : (def.id === 'ars' && !currentGlobalSettings.activeCurrencies.some(ac => ac.isPrimary)), 
-          };
-        }).filter(c => currentGlobalSettings.activeCurrencies.some(ac => ac.id === c.id)) // Only include locally if active in global
-      );
-      // Ensure at least ARS is active and primary if no active currencies are defined or no primary is set.
-      if (!localActiveCurrencies.some(c => c.isPrimary) || localActiveCurrencies.length === 0) {
+      let activeInSettings = SUPPORTED_CURRENCIES.map(def => {
+        const activeSetting = currentGlobalSettings.activeCurrencies.find(ac => ac.id === def.id);
+        return activeSetting ? { ...def, isPrimary: !!activeSetting.isPrimary } : null;
+      }).filter(Boolean) as ActiveCurrencySetting[];
+
+      if (activeInSettings.length === 0) {
         const arsDef = SUPPORTED_CURRENCIES.find(c => c.id === 'ars')!;
-        setLocalActiveCurrencies(prev => {
-            const arsExists = prev.find(c => c.id === 'ars');
-            if(arsExists) {
-                return prev.map(c => ({...c, isPrimary: c.id === 'ars'}));
-            }
-            return [...prev, {...arsDef, isPrimary: true}];
-        });
+        activeInSettings = [{ ...arsDef, isPrimary: true }];
       }
 
+      let primaryCurrencies = activeInSettings.filter(c => c.isPrimary);
 
+      if (primaryCurrencies.length === 0) {
+        const arsIndex = activeInSettings.findIndex(c => c.id === 'ars');
+        if (arsIndex !== -1) {
+          activeInSettings[arsIndex].isPrimary = true;
+        } else if (activeInSettings.length > 0) {
+          activeInSettings[0].isPrimary = true; 
+        }
+      } else if (primaryCurrencies.length > 1) {
+        let foundFirstPrimary = false;
+        activeInSettings = activeInSettings.map(c => {
+          if (c.isPrimary) {
+            if (!foundFirstPrimary) {
+              foundFirstPrimary = true;
+              return c;
+            }
+            return { ...c, isPrimary: false };
+          }
+          return c;
+        });
+      }
+      
+      setLocalActiveCurrencies(activeInSettings);
       setLocalExchangeRates(currentGlobalSettings.exchangeRates || { usdToArs: 1000, eurToArs: 1100 });
       setLocalAllowUserToChooseCurrency(currentGlobalSettings.allowUserToChooseCurrency);
     }
@@ -64,7 +73,7 @@ export default function CurrenciesAdminPage() {
 
 
   useEffect(() => {
-    if (!isLoadingSettings && currentGlobalSettings) { // Ensure global settings are loaded
+    if (!isLoadingSettings && currentGlobalSettings) { 
       initializeLocalState();
     }
   }, [isLoadingSettings, currentGlobalSettings, initializeLocalState]);
@@ -78,30 +87,34 @@ export default function CurrenciesAdminPage() {
       const isCurrentlyActive = prev.some(c => c.id === id);
 
       if (isCurrentlyActive) { // Deactivating
-        if (prev.length <= 1) {
-          toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: t('adminCurrenciesPage.toasts.atLeastOneActiveError'), variant: 'destructive' });
+        const currencyToDeactivate = prev.find(c => c.id === id);
+        if (currencyToDeactivate?.isPrimary) {
+          toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: t('adminCurrenciesPage.toasts.cannotDeactivatePrimaryError'), variant: 'destructive' });
           return prev;
         }
-        if (prev.find(c => c.id === id)?.isPrimary) {
-            toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: t('adminCurrenciesPage.toasts.cannotDeactivatePrimaryError'), variant: 'destructive' });
-            return prev;
+        if (prev.filter(c => c.id !== id).length === 0) { 
+           toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: t('adminCurrenciesPage.toasts.atLeastOneActiveError'), variant: 'destructive' });
+           return prev;
         }
         return prev.filter(c => c.id !== id);
       } else { // Activating
-        return [...prev, { ...currencyDef, isPrimary: false }];
+        const noPrimaryExists = !prev.some(c => c.isPrimary);
+        return [...prev, { ...currencyDef, isPrimary: noPrimaryExists }];
       }
     });
   };
   
-  const handleSetPrimary = (id: string) => {
-     if (id !== 'ars') {
-        toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: t('adminCurrenciesPage.toasts.primaryMustBeArsError'), variant: 'destructive' });
+  const handleSetPrimary = (idToSetAsPrimary: string) => {
+    const isCurrencyActive = localActiveCurrencies.some(c => c.id === idToSetAsPrimary);
+    if (!isCurrencyActive) {
+        toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: t('adminCurrenciesPage.toasts.mustBeActiveToSetPrimaryError'), variant: 'destructive' });
         return;
     }
+
     setLocalActiveCurrencies(prevSettings =>
       prevSettings.map(currency => ({
         ...currency,
-        isPrimary: currency.id === id,
+        isPrimary: currency.id === idToSetAsPrimary,
       }))
     );
   };
@@ -120,10 +133,6 @@ export default function CurrenciesAdminPage() {
       toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: t('adminCurrenciesPage.toasts.selectPrimaryError'), variant: "destructive" });
       return;
     }
-    if (primaryCurrency.id !== 'ars') {
-        toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: t('adminCurrenciesPage.toasts.primaryMustBeArsError'), variant: "destructive" });
-        return;
-    }
 
     if (localExchangeRates.usdToArs <= 0 || localExchangeRates.eurToArs <= 0) {
       toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: t('adminCurrenciesPage.toasts.ratesMustBePositiveError'), variant: "destructive"});
@@ -136,7 +145,13 @@ export default function CurrenciesAdminPage() {
 
     setIsSubmitting(true);
     const settingsToUpdate: Partial<SiteSettings> = {
-      activeCurrencies: localActiveCurrencies, // Save the full local list
+      activeCurrencies: localActiveCurrencies.map(c => ({
+        id: c.id,
+        code: c.code,
+        name: c.name,
+        symbol: c.symbol,
+        isPrimary: c.isPrimary,
+      })),
       exchangeRates: localExchangeRates,
       allowUserToChooseCurrency: localAllowUserToChooseCurrency,
     };
@@ -170,17 +185,19 @@ export default function CurrenciesAdminPage() {
         <CardHeader>
           <CardTitle className="font-headline text-2xl">{t('adminCurrenciesPage.cardTitle')}</CardTitle>
           <CardDescription>
-            {t('adminCurrenciesPage.cardDescriptionArsBase')}
+            {t('adminCurrenciesPage.cardDescriptionFlexiblePrimary')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Exchange Rate Inputs */}
           <div className="space-y-4 p-4 border rounded-lg bg-card/50">
             <h3 className="text-lg font-semibold text-foreground">{t('adminCurrenciesPage.exchangeRatesTitle')}</h3>
+             <p className="text-sm text-muted-foreground">
+                {t('adminCurrenciesPage.exchangeRateHelpText')}
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="usd-rate" className="text-sm font-medium">
-                  {t('adminCurrenciesPage.usdToArsRateLabel', { arsSymbol: SUPPORTED_CURRENCIES.find(c=>c.id==='ars')?.symbol || '$' })}
+                  {t('adminCurrenciesPage.usdToArsRateLabel')}
                 </Label>
                 <Input
                   id="usd-rate"
@@ -195,7 +212,7 @@ export default function CurrenciesAdminPage() {
               </div>
               <div>
                 <Label htmlFor="eur-rate" className="text-sm font-medium">
-                  {t('adminCurrenciesPage.eurToArsRateLabel', { arsSymbol: SUPPORTED_CURRENCIES.find(c=>c.id==='ars')?.symbol || '$' })}
+                  {t('adminCurrenciesPage.eurToArsRateLabel')}
                 </Label>
                 <Input
                   id="eur-rate"
@@ -211,12 +228,11 @@ export default function CurrenciesAdminPage() {
             </div>
           </div>
 
-          {/* Currency Activation and Primary Selection List */}
           <div className="space-y-3">
              <h3 className="text-lg font-semibold text-foreground">{t('adminCurrenciesPage.activeCurrenciesTitle')}</h3>
             {SUPPORTED_CURRENCIES.map(currencyDef => {
-              const isActiveInLocal = localActiveCurrencies.some(ac => ac.id === currencyDef.id);
               const localCurrencyData = localActiveCurrencies.find(ac => ac.id === currencyDef.id);
+              const isActiveInLocal = !!localCurrencyData;
 
               return (
                 <div key={currencyDef.id} className="p-4 border rounded-lg bg-card/50 space-y-3">
@@ -234,13 +250,12 @@ export default function CurrenciesAdminPage() {
                           checked={isActiveInLocal}
                           onCheckedChange={() => handleToggleActive(currencyDef.id)}
                           aria-label={`Toggle ${currencyDef.name} active status`}
-                           disabled={currencyDef.id === 'ars' && localActiveCurrencies.find(c => c.id === 'ars')?.isPrimary}
                         />
                         <Label htmlFor={`currency-active-${currencyDef.id}`}>
                           {isActiveInLocal ? t('adminCurrenciesPage.statusActive') : t('adminCurrenciesPage.statusInactive')}
                         </Label>
                       </div>
-                      {isActiveInLocal && currencyDef.id === 'ars' && (
+                      {isActiveInLocal && (
                         <Button
                           variant={localCurrencyData?.isPrimary ? "default" : "outline"}
                           size="sm"
@@ -278,3 +293,5 @@ export default function CurrenciesAdminPage() {
     </div>
   );
 }
+
+    

@@ -1,107 +1,128 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Palette, Save, RotateCcw } from "lucide-react";
+import { Palette, Save, RotateCcw, Loader2 } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
-
-interface ColorSetting {
-  id: string;
-  label: string;
-  cssVar: string; 
-  value: string; 
-  type: 'color' | 'text'; 
-}
-
-const defaultThemeColors: ColorSetting[] = [
-  { id: 'primary', label: 'Primary Color', cssVar: '--primary', value: '45 69% 52%', type: 'text' }, 
-  { id: 'primary-foreground', label: 'Primary Text', cssVar: '--primary-foreground', value: '0 0% 10%', type: 'text' }, 
-  { id: 'background', label: 'Background Color', cssVar: '--background', value: '0 0% 10%', type: 'text' }, 
-  { id: 'foreground', label: 'Main Text Color', cssVar: '--foreground', value: '0 0% 93%', type: 'text' }, 
-  { id: 'card', label: 'Card Background', cssVar: '--card', value: '0 0% 12%', type: 'text' },
-  { id: 'accent', label: 'Accent Color (UI Elements)', cssVar: '--accent', value: '0 0% 20%', type: 'text' },
-  { id: 'button-default-bg', label: 'Default Button BG (Primary)', cssVar: '--primary', value: '45 69% 52%', type: 'text' },
-  { id: 'button-default-text', label: 'Default Button Text (Primary FG)', cssVar: '--primary-foreground', value: '0 0% 10%', type: 'text' },
-];
-
-const hslToHex = (hsl: string): string => {
-  if (hsl.includes('%')) { 
-    const parts = hsl.match(/(\d+)\s+(\d+)%\s+(\d+)%/);
-    if (parts) {
-      let [h, s, l] = [parseInt(parts[1]), parseInt(parts[2]), parseInt(parts[3])];
-      s /= 100;
-      l /= 100;
-      const k = (n:number) => (n + h / 30) % 12;
-      const a = s * Math.min(l, 1 - l);
-      const f = (n:number) =>
-        l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-      return `#${[0, 8, 4].map(n => Math.round(f(n) * 255).toString(16).padStart(2, '0')).join('')}`;
-    }
-  }
-  return hsl.startsWith('#') ? hsl : '#000000'; 
-};
-
-const hexToHslString = (hex: string): string => {
-  return hex; 
-};
-
+import { type ColorSetting, defaultThemeColorsHex } from '@/lib/config';
+import { hexToHslString } from '@/lib/utils';
+import { updateSiteSettings } from '@/lib/actions'; // Import updateSiteSettings
 
 export default function AppearanceAdminPage() {
-  const { t } = useTranslation();
-  const [colorSettings, setColorSettings] = useState<ColorSetting[]>(defaultThemeColors);
+  const { t, siteSettings, isLoadingSettings, refreshSiteSettings } = useTranslation();
+  const [colorSettings, setColorSettings] = useState<ColorSetting[]>(
+    JSON.parse(JSON.stringify(defaultThemeColorsHex)) // Deep clone for initial state
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const savedColors = localStorage.getItem('aurum_theme_colors');
-    if (savedColors) {
-      setColorSettings(JSON.parse(savedColors));
-    }
+  const applyThemeToDocument = useCallback((theme: ColorSetting[]) => {
+    theme.forEach(color => {
+      const hslValue = hexToHslString(color.value);
+      document.documentElement.style.setProperty(color.cssVar, hslValue);
+    });
   }, []);
 
-  const handleColorChange = (id: string, newValue: string) => {
-    setColorSettings(prevSettings =>
-      prevSettings.map(setting =>
-        setting.id === id ? { ...setting, value: setting.type === 'color' ? newValue : newValue } : setting
-      )
-    );
+  useEffect(() => {
+    if (!isLoadingSettings && siteSettings?.themeColors) {
+      // Merge DB colors with defaults to ensure all settings are present
+      // and to pick up new default settings if they were added.
+      const mergedSettings = defaultThemeColorsHex.map(defaultSetting => {
+        const dbSetting = siteSettings.themeColors.find(s => s.id === defaultSetting.id);
+        // Ensure value is a valid HEX, otherwise use default.
+        const value = dbSetting?.value && /^#[0-9A-Fa-f]{6}$/.test(dbSetting.value)
+                        ? dbSetting.value
+                        : defaultSetting.defaultValueHex;
+        return { ...defaultSetting, value };
+      });
+      setColorSettings(mergedSettings);
+      applyThemeToDocument(mergedSettings); // Apply loaded theme on initial load of this page
+    } else if (!isLoadingSettings && !siteSettings?.themeColors) {
+      // If no themeColors in DB, use defaults and apply them.
+      const defaults = defaultThemeColorsHex.map(c => ({ ...c, value: c.defaultValueHex }));
+      setColorSettings(defaults);
+      applyThemeToDocument(defaults);
+    }
+  }, [siteSettings, isLoadingSettings, applyThemeToDocument]);
+
+
+  const handleColorChange = (id: string, newValueHex: string) => {
+    setColorSettings(prevSettings => {
+      const newSettings = prevSettings.map(setting =>
+        setting.id === id ? { ...setting, value: newValueHex.toUpperCase() } : setting
+      );
+      applyThemeToDocument(newSettings); // Live preview on this page
+      return newSettings;
+    });
   };
 
-  const handleSaveChanges = () => {
-    localStorage.setItem('aurum_theme_colors', JSON.stringify(colorSettings));
-    colorSettings.forEach(color => {
-      let valueToSet = color.value;
-      document.documentElement.style.setProperty(color.cssVar, valueToSet);
-    });
-    toast({
-      title: t('adminAppearancePage.toasts.updateTitle'),
-      description: t('adminAppearancePage.toasts.updateDescription'),
-    });
-  };
-  
-  const handleResetToDefaults = () => {
-    setColorSettings(defaultThemeColors);
-    localStorage.removeItem('aurum_theme_colors');
-     defaultThemeColors.forEach(color => {
-      document.documentElement.style.setProperty(color.cssVar, color.value);
-    });
-    toast({
-      title: t('adminAppearancePage.toasts.resetTitle'),
-      description: t('adminAppearancePage.toasts.resetDescription'),
-    });
+  const handleSaveChanges = async () => {
+    setIsSubmitting(true);
+    try {
+      const result = await updateSiteSettings({ themeColors: colorSettings });
+      if (result.success) {
+        toast({
+          title: t('adminAppearancePage.toasts.updateTitle'),
+          description: t('adminAppearancePage.toasts.updateDescription'),
+        });
+        await refreshSiteSettings(); // Refresh global site settings
+      } else {
+        toast({ title: "Error", description: result.message || "Failed to save settings.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Helper to get a translated label or fallback to original label
+  const handleResetToDefaults = async () => {
+    setIsSubmitting(true);
+    const defaultsToSave = defaultThemeColorsHex.map(setting => ({
+      ...setting,
+      value: setting.defaultValueHex // Ensure 'value' is set to the default HEX
+    }));
+    
+    setColorSettings(defaultsToSave); // Update local state for inputs
+    applyThemeToDocument(defaultsToSave); // Apply defaults for live preview
+
+    try {
+      const result = await updateSiteSettings({ themeColors: defaultsToSave });
+      if (result.success) {
+        toast({
+          title: t('adminAppearancePage.toasts.resetTitle'),
+          description: t('adminAppearancePage.toasts.resetDescription'),
+        });
+        await refreshSiteSettings(); // Refresh global site settings
+      } else {
+        toast({ title: "Error", description: result.message || "Failed to reset settings.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "An unexpected error occurred while resetting.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getSettingLabel = (setting: ColorSetting): string => {
-    const translationKey = `adminAppearancePage.colorLabels.${setting.id.replace(/-/g, '_')}`; // e.g. primary_foreground
-    const translated = t(translationKey);
-    return translated === translationKey ? setting.label : translated; // Fallback to original if no translation
+    const translated = t(setting.labelKey);
+    return translated === setting.labelKey ? setting.id.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : translated;
   };
 
+  if (isLoadingSettings && !siteSettings) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <main className="flex-grow flex items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -118,40 +139,43 @@ export default function AppearanceAdminPage() {
             {t('adminAppearancePage.cardDescription')}
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
           {colorSettings.map(setting => (
             <div key={setting.id} className="space-y-2">
-              <Label htmlFor={`color-${setting.id}`} className="text-base font-medium">{getSettingLabel(setting)} ({setting.cssVar})</Label>
+              <Label htmlFor={`color-text-${setting.id}`} className="text-sm font-medium">
+                {getSettingLabel(setting)} ({setting.cssVar})
+              </Label>
               <div className="flex items-center space-x-2">
-                {setting.type === 'color' && (
-                  <Input
-                    type="color"
-                    id={`color-picker-${setting.id}`}
-                    value={hslToHex(setting.value)} 
-                    onChange={(e) => handleColorChange(setting.id, hexToHslString(e.target.value))} 
-                    className="w-16 h-10 p-1"
-                    aria-label={`${getSettingLabel(setting)} color picker`}
-                  />
-                )}
                 <Input
-                  type="text" 
-                  id={`color-${setting.id}`}
+                  type="color"
+                  id={`color-picker-${setting.id}`}
                   value={setting.value}
                   onChange={(e) => handleColorChange(setting.id, e.target.value)}
-                  placeholder={setting.type === 'color' ? '#RRGGBB or HSL' : t('adminAppearancePage.hslPlaceholder')}
-                  className="text-base"
-                  aria-label={`${getSettingLabel(setting)} value`}
+                  className="w-12 h-10 p-1 rounded-md border-input"
+                  aria-label={`${getSettingLabel(setting)} color picker`}
+                />
+                <Input
+                  type="text"
+                  id={`color-text-${setting.id}`}
+                  value={setting.value}
+                  onChange={(e) => handleColorChange(setting.id, e.target.value)}
+                  placeholder={t('adminAppearancePage.hexPlaceholder')}
+                  className="text-sm flex-grow"
+                  aria-label={`${getSettingLabel(setting)} HEX value`}
+                  maxLength={7}
                 />
               </div>
-               {setting.type === 'text' && <p className="text-xs text-muted-foreground">{t('adminAppearancePage.hslHelpText')}</p>}
+              <p className="text-xs text-muted-foreground">{t('adminAppearancePage.hexHelpText')}</p>
             </div>
           ))}
         </CardContent>
-        <CardFooter className="flex justify-end space-x-3">
-          <Button variant="outline" onClick={handleResetToDefaults}>
+        <CardFooter className="flex justify-end space-x-3 border-t pt-6 mt-6">
+          <Button variant="outline" onClick={handleResetToDefaults} disabled={isSubmitting}>
+             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             <RotateCcw className="mr-2 h-4 w-4" /> {t('adminAppearancePage.resetButton')}
           </Button>
-          <Button onClick={handleSaveChanges}>
+          <Button onClick={handleSaveChanges} disabled={isSubmitting}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             <Save className="mr-2 h-4 w-4" /> {t('adminAppearancePage.saveButton')}
           </Button>
         </CardFooter>
@@ -162,17 +186,17 @@ export default function AppearanceAdminPage() {
           <CardDescription>{t('adminAppearancePage.livePreview.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="p-4 rounded-md" style={{ backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))', border: '1px solid hsl(var(--border))' }}>
+          <div className="p-4 rounded-md" style={{ backgroundColor: `hsl(${hexToHslString(colorSettings.find(s => s.id === 'background')?.value || '#1A1A1A')})`, color: `hsl(${hexToHslString(colorSettings.find(s => s.id === 'foreground')?.value || '#EEEEEE')})`, border: `1px solid hsl(${hexToHslString(colorSettings.find(s => s.id === 'border')?.value || '#333333')})` }}>
             {t('adminAppearancePage.livePreview.boxText')}
-            <p style={{ color: 'hsl(var(--primary))' }}>{t('adminAppearancePage.livePreview.primaryColorText')}</p>
+            <p style={{ color: `hsl(${hexToHslString(colorSettings.find(s => s.id === 'primary')?.value || '#D4AF37')})` }}>{t('adminAppearancePage.livePreview.primaryColorText')}</p>
           </div>
-          <Button style={{ backgroundColor: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}>
+          <Button style={{ backgroundColor: `hsl(${hexToHslString(colorSettings.find(s => s.id === 'primary')?.value || '#D4AF37')})`, color: `hsl(${hexToHslString(colorSettings.find(s => s.id === 'primary-foreground')?.value || '#1A1A1A')})` }}>
             {t('adminAppearancePage.livePreview.primaryButton')}
           </Button>
-           <Button variant="secondary" style={{ backgroundColor: 'hsl(var(--secondary))', color: 'hsl(var(--secondary-foreground))' }}>
+           <Button variant="secondary" style={{ backgroundColor: `hsl(${hexToHslString(colorSettings.find(s => s.id === 'secondary')?.value || '#262626')})`, color: `hsl(${hexToHslString(colorSettings.find(s => s.id === 'secondary-foreground')?.value || '#EEEEEE')})` }}>
             {t('adminAppearancePage.livePreview.secondaryButton')}
           </Button>
-          <div className="p-4 rounded-md" style={{ backgroundColor: 'hsl(var(--card))', color: 'hsl(var(--card-foreground))' }}>
+          <div className="p-4 rounded-md" style={{ backgroundColor: `hsl(${hexToHslString(colorSettings.find(s => s.id === 'card')?.value || '#1F1F1F')})`, color: `hsl(${hexToHslString(colorSettings.find(s => s.id === 'card-foreground')?.value || '#EEEEEE')})` }}>
             {t('adminAppearancePage.livePreview.cardText')}
           </div>
         </CardContent>

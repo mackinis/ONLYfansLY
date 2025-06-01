@@ -13,7 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { PlusCircle, Edit, Trash2, Loader2, Video as VideoIcon, ArrowUp, ArrowDown, Save, Eye } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Video as VideoIcon, ArrowUp, ArrowDown, Save, Eye, Percent, Tag } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getVideoCourses, createVideoCourse, updateVideoCourse, deleteVideoCourse, updateVideoCoursesOrder } from '@/lib/actions';
 import { useTranslation } from '@/context/I18nContext';
@@ -35,14 +35,14 @@ const courseFormSchema = z.object({
   previewImageUrl: z.string().url({ message: "Please enter a valid URL for the preview image." }).optional().or(z.literal('')),
   videoUrl: z.string().url({ message: "Please enter a valid URL for the video." }),
   priceArs: z.coerce.number().positive({ message: "Price must be a positive number." }),
+  discountInput: z.string().optional().or(z.literal('')),
   duration: z.string().optional(),
-  // 'order' and 'views' are managed by the system, not directly by this form
 });
 
 type CourseFormValues = z.infer<typeof courseFormSchema>;
 
 export default function AdminCoursesPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [courses, setCourses] = useState<Video[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,6 +60,7 @@ export default function AdminCoursesPage() {
       previewImageUrl: '',
       videoUrl: '',
       priceArs: 0,
+      discountInput: '',
       duration: '',
     },
   });
@@ -69,7 +70,7 @@ export default function AdminCoursesPage() {
     try {
       const fetchedCourses = await getVideoCourses();
       setCourses(fetchedCourses);
-      setIsOrderChanged(false); // Reset order change flag after fetching
+      setIsOrderChanged(false); 
     } catch (error) {
       toast({ title: t('adminCoursesPage.toasts.fetchErrorTitle'), description: error instanceof Error ? error.message : t('adminCoursesPage.toasts.fetchErrorDescription'), variant: 'destructive' });
     } finally {
@@ -91,16 +92,18 @@ export default function AdminCoursesPage() {
         previewImageUrl: course.previewImageUrl || '',
         videoUrl: course.videoUrl,
         priceArs: course.priceArs,
+        discountInput: course.discountInput || '',
         duration: course.duration || '',
       });
     } else {
       setEditingCourse(null);
-      form.reset({ // Reset to defaults for new course
+      form.reset({ 
         title: '',
         description: '',
         previewImageUrl: '',
         videoUrl: '',
         priceArs: 0,
+        discountInput: '',
         duration: '',
       });
     }
@@ -120,7 +123,6 @@ export default function AdminCoursesPage() {
       if (editingCourse) {
         result = await updateVideoCourse(editingCourse.id, data);
       } else {
-        // For new courses, 'order' and 'views' are handled by createVideoCourse action
         result = await createVideoCourse(data);
       }
 
@@ -168,7 +170,6 @@ export default function AdminCoursesPage() {
 
     if (targetIndex < 0 || targetIndex >= newCourses.length) return;
 
-    // Swap elements
     [newCourses[currentIndex], newCourses[targetIndex]] = [newCourses[targetIndex], newCourses[currentIndex]];
     
     setCourses(newCourses);
@@ -179,14 +180,13 @@ export default function AdminCoursesPage() {
     setIsSavingOrder(true);
     const coursesToUpdate = courses.map((course, index) => ({
       id: course.id,
-      order: index + 1, // Re-assign order based on current array position
+      order: index + 1, 
     }));
     try {
       const result = await updateVideoCoursesOrder(coursesToUpdate);
       if (result.success) {
         toast({ title: t('adminCoursesPage.toasts.orderUpdateSuccessTitle'), description: result.message });
         setIsOrderChanged(false);
-        // fetchCourses(); // Re-fetch to confirm, or trust local state if preferred
       } else {
         toast({ title: t('adminCoursesPage.toasts.orderUpdateErrorTitle'), description: result.message, variant: 'destructive' });
       }
@@ -195,6 +195,20 @@ export default function AdminCoursesPage() {
     } finally {
       setIsSavingOrder(false);
     }
+  };
+
+  const getPriceDisplay = (course: Video) => {
+    const originalPriceFormatted = `ARS $${course.priceArs.toLocaleString()}`;
+    if (course.discountInput && course.finalPriceArs !== undefined && course.finalPriceArs < course.priceArs) {
+      const finalPriceFormatted = `ARS $${course.finalPriceArs.toLocaleString()}`;
+      return (
+        <>
+          <span className="line-through text-muted-foreground text-xs mr-1">{originalPriceFormatted}</span>
+          <span className="text-primary font-semibold">{finalPriceFormatted}</span>
+        </>
+      );
+    }
+    return <span className="font-semibold">{originalPriceFormatted}</span>;
   };
   
   if (isLoading) {
@@ -244,10 +258,10 @@ export default function AdminCoursesPage() {
                 courses.map((course, index) => (
                   <TableRow key={course.id}>
                     <TableCell className="font-medium">{course.title}</TableCell>
-                    <TableCell>ARS ${course.priceArs.toLocaleString()}</TableCell>
+                    <TableCell>{getPriceDisplay(course)}</TableCell>
                     <TableCell>{course.duration || 'N/A'}</TableCell>
                     <TableCell className="text-center">{course.views || 0}</TableCell>
-                    <TableCell>{new Date(course.updatedAt).toLocaleDateString()}</TableCell>
+                    <TableCell>{new Date(course.updatedAt).toLocaleDateString(language)}</TableCell>
                     <TableCell className="text-right space-x-1">
                       <Button variant="ghost" size="icon" onClick={() => handleMove(course.id, 'up')} disabled={index === 0 || isSavingOrder} title="Move Up">
                         <ArrowUp className="h-4 w-4" />
@@ -320,9 +334,29 @@ export default function AdminCoursesPage() {
                   <FormMessage />
                 </FormItem>
               )} />
-              <FormField control={form.control} name="priceArs" render={({ field }) => (
-                <FormItem><FormLabel>{t('adminCoursesPage.form.priceArs')}</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField control={form.control} name="priceArs" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center">
+                            <Tag className="mr-2 h-4 w-4 text-muted-foreground"/>
+                            {t('adminCoursesPage.form.priceArs')}
+                        </FormLabel>
+                        <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <FormField control={form.control} name="discountInput" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center">
+                             <Percent className="mr-2 h-4 w-4 text-muted-foreground"/>
+                            {t('adminCoursesPage.form.discountInput')} ({t('adminCoursesPage.form.optional')})
+                        </FormLabel>
+                        <FormControl><Input placeholder="Ej: 10% o 89990" {...field} /></FormControl>
+                         <ShadFormDescription>{t('adminCoursesPage.form.discountInputDescription')}</ShadFormDescription>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+              </div>
               <FormField control={form.control} name="duration" render={({ field }) => (
                 <FormItem><FormLabel>{t('adminCoursesPage.form.duration')} ({t('adminCoursesPage.form.optional')})</FormLabel><FormControl><Input placeholder="e.g., 45min, 1h 30m" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
@@ -341,4 +375,3 @@ export default function AdminCoursesPage() {
     </div>
   );
 }
-

@@ -8,9 +8,10 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Film, Facebook, Instagram, Twitter, Youtube, Linkedin, MessageCircle, Link2, Music2 } from 'lucide-react';
 import { useTranslation } from '@/context/I18nContext';
-import type { SocialLink } from '@/lib/types';
+import type { SocialLink, FooterDisplayMode } from '@/lib/types';
 import React from 'react';
 import Image from 'next/image';
+import { cn } from '@/lib/utils';
 
 const SocialIcon = ({ name, className }: { name?: string, className?: string }) => {
   const lowerName = name?.toLowerCase() || '';
@@ -31,21 +32,53 @@ export default function Footer() {
   const [isTestimonialModalOpen, setIsTestimonialModalOpen] = useState(false);
 
   const socialLinks = siteSettings?.socialLinks || [];
+  const footerDisplayMode = siteSettings?.footerDisplayMode || 'logo';
+  const footerLogoSize = siteSettings?.footerLogoSize || 64; // Default to 64px if not set
+
+  const renderFooterBrand = () => {
+    const showLogo = footerDisplayMode === 'logo' || footerDisplayMode === 'both';
+    const showTitle = footerDisplayMode === 'title' || footerDisplayMode === 'both';
+
+    return (
+      <div className={cn(
+        "flex items-center",
+        footerDisplayMode === 'both' ? "flex-col space-y-2" : "justify-center" // Centered horizontally always if 'both'
+      )}>
+        {showLogo && (
+          <Link href="/" aria-label={currentSiteTitle || t('header.title')}>
+            {siteSettings?.siteIconUrl ? (
+              <Image src={siteSettings.siteIconUrl} alt={currentSiteTitle || t('header.title')} width={footerLogoSize} height={footerLogoSize} className="rounded-sm" data-ai-hint="logo" style={{width: `${footerLogoSize}px`, height: `${footerLogoSize}px`}} />
+            ) : (
+              <Film className="text-primary" style={{width: `${footerLogoSize}px`, height: `${footerLogoSize}px`}} />
+            )}
+          </Link>
+        )}
+        {showTitle && (
+          <Link href="/" aria-label={currentSiteTitle || t('header.title')}>
+            <span className={cn(
+              "font-headline text-primary",
+              footerDisplayMode === 'both' ? "text-lg mt-1" : "text-xl", // Slightly smaller if below logo
+              !showLogo && "text-2xl" // Larger if only title
+            )}>
+              {currentSiteTitle || t('header.title')}
+            </span>
+          </Link>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
       <footer className="bg-card text-card-foreground border-t border-border/40 mt-auto">
         <div className="container py-12 px-4 md:px-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
-            {/* Column 1: Icon */}
-            <div className="flex items-center justify-center"> {/* Removed md:justify-start */}
-              <Link href="/" aria-label={currentSiteTitle || t('header.title')}>
-                {siteSettings?.siteIconUrl ? (
-                  <Image src={siteSettings.siteIconUrl} alt={currentSiteTitle || t('header.title')} width={64} height={64} className="h-16 w-16 rounded-sm" data-ai-hint="logo" />
-                ) : (
-                  <Film className="h-16 w-16 text-primary" />
-                )}
-              </Link>
+            {/* Column 1: Brand */}
+            <div className={cn(
+              "flex", 
+              footerDisplayMode === 'both' || footerDisplayMode === 'title' || footerDisplayMode === 'logo' ? "items-center justify-center" : "md:justify-start items-center"
+            )}>
+              {renderFooterBrand()}
             </div>
 
             {/* Column 2: Quick Links */}

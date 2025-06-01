@@ -22,7 +22,7 @@ interface CourseDetailModalProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   video: Video | null;
-  onWatchVideo: (video: Video) => void; // To open the VideoPlayerModal
+  onWatchVideo: (video: Video) => void; 
   displayCurrency: ActiveCurrencySetting | null;
   exchangeRates: ExchangeRates | null;
 }
@@ -37,7 +37,8 @@ export default function CourseDetailModal({
 }: CourseDetailModalProps) {
   const { t, language } = useTranslation();
   const [formattedUpdatedAt, setFormattedUpdatedAt] = useState<string | null>(null);
-  const [displayPrice, setDisplayPrice] = useState<string | null>(null);
+  const [originalPriceDisplay, setOriginalPriceDisplay] = useState<string | null>(null);
+  const [finalPriceDisplay, setFinalPriceDisplay] = useState<string | null>(null);
 
   useEffect(() => {
     if (video?.updatedAt) {
@@ -53,29 +54,48 @@ export default function CourseDetailModal({
   }, [video?.updatedAt, language, t]);
 
   useEffect(() => {
-    if (video?.priceArs && displayCurrency && exchangeRates) {
-      let price = video.priceArs;
-      let symbol = displayCurrency.symbol;
-      let targetLocale = 'es-AR';
+    if (displayCurrency && exchangeRates && video) {
+        const originalPrice = video.priceArs;
+        const finalPrice = (typeof video.finalPriceArs === 'number' && !isNaN(video.finalPriceArs)) 
+                            ? video.finalPriceArs 
+                            : originalPrice;
 
-      if (displayCurrency.code === 'USD') {
-        price = video.priceArs / exchangeRates.usdToArs;
-        targetLocale = 'en-US';
-      } else if (displayCurrency.code === 'EUR') {
-        price = video.priceArs / exchangeRates.eurToArs;
-        targetLocale = 'de-DE';
-      }
-      try {
-         setDisplayPrice(`${symbol}${price.toLocaleString(targetLocale, { minimumFractionDigits: displayCurrency.code === 'ARS' ? 0 : 2, maximumFractionDigits: displayCurrency.code === 'ARS' ? 0 : 2 })}`);
-      } catch(e) {
-         setDisplayPrice(`${symbol}${price.toFixed(displayCurrency.code === 'ARS' ? 0 : 2)}`);
-      }
+        const formatPrice = (price: number, currency: ActiveCurrencySetting, rates: ExchangeRates) => {
+            let p = price;
+            let sym = currency.symbol;
+            let loc = language === 'es' ? 'es-AR' : 'en-US';
+
+            if (currency.code === 'USD') {
+                p = price / rates.usdToArs;
+                loc = 'en-US';
+            } else if (currency.code === 'EUR') {
+                p = price / rates.eurToArs;
+                loc = language === 'es' ? 'es-ES' : 'de-DE';
+            }
+            try {
+                return `${sym}${p.toLocaleString(loc, { minimumFractionDigits: currency.code === 'ARS' ? 0 : 2, maximumFractionDigits: currency.code === 'ARS' ? 0 : 2 })}`;
+            } catch(e) {
+                 return `${sym}${p.toFixed(currency.code === 'ARS' ? 0 : 2)}`;
+            }
+        };
+
+        const currentFinalPriceStr = formatPrice(finalPrice, displayCurrency, exchangeRates);
+        setFinalPriceDisplay(currentFinalPriceStr);
+
+        if (video.discountInput && video.discountInput.trim() !== '' && typeof video.finalPriceArs === 'number' && video.finalPriceArs < originalPrice) {
+            const currentOriginalPriceStr = formatPrice(originalPrice, displayCurrency, exchangeRates);
+            setOriginalPriceDisplay(currentOriginalPriceStr);
+        } else {
+            setOriginalPriceDisplay(null);
+        }
     } else if (video?.priceArs) {
-      setDisplayPrice(`${video.priceArs.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ARS (raw)`);
+        setOriginalPriceDisplay(null);
+        setFinalPriceDisplay(`${video.priceArs.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ARS (raw)`);
     } else {
-        setDisplayPrice(t('videoCard.loadingPrice'));
+        setOriginalPriceDisplay(null);
+        setFinalPriceDisplay(t('videoCard.loadingPrice'));
     }
-  }, [video?.priceArs, displayCurrency, exchangeRates, t]);
+  }, [video, displayCurrency, exchangeRates, t, language]);
 
   if (!video) {
     return null;
@@ -105,10 +125,19 @@ export default function CourseDetailModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
               <div>
                 <h4 className="text-xs text-muted-foreground uppercase tracking-wider">{t('courseDetailModal.priceTitle')}</h4>
-                <p className="text-lg font-semibold text-primary flex items-center">
-                  <Tag className="h-5 w-5 mr-2" />
-                  {displayPrice}
-                </p>
+                <div className="flex flex-col items-start"> {/* Changed to flex-col and items-start */}
+                  {originalPriceDisplay && (
+                    <span className="line-through text-muted-foreground text-sm">
+                      {originalPriceDisplay}
+                    </span>
+                  )}
+                  <div className="flex items-center mt-0.5"> {/* Keep Tag and final price inline */}
+                    <Tag className="h-5 w-5 mr-1.5 text-primary" />
+                    <p className="text-lg font-semibold text-primary">
+                      {finalPriceDisplay}
+                    </p>
+                  </div>
+                </div>
               </div>
               {video.duration && (
                 <div>

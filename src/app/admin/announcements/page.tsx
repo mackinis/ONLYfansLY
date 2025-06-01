@@ -14,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { PlusCircle, Edit, Trash2, Loader2, Megaphone, CalendarIcon, Image as ImageIcon, Video as VideoIconLucide } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Megaphone, CalendarIcon, Image as ImageIcon, Video as VideoIconLucide, CheckSquare, Square } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createAnnouncement, getAnnouncements, updateAnnouncement, deleteAnnouncement } from '@/lib/actions';
 import { useTranslation } from '@/context/I18nContext';
@@ -48,6 +48,7 @@ const announcementFormSchema = z.object({
     invalid_type_error: "That's not a valid date!",
   }),
   isActive: z.boolean().default(true),
+  showOnce: z.boolean().default(false),
 }).superRefine((data, ctx) => {
   if (data.contentType === 'image-only' && !data.imageUrl) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Image URL is required for 'Image only' type.", path: ['imageUrl'] });
@@ -86,6 +87,7 @@ export default function AdminAnnouncementsPage() {
       videoUrl: '',
       expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default to 1 week from now
       isActive: true,
+      showOnce: false,
     },
   });
 
@@ -119,6 +121,7 @@ export default function AdminAnnouncementsPage() {
         videoUrl: announcement.videoUrl || '',
         expiryDate: new Date(announcement.expiryDate),
         isActive: announcement.isActive,
+        showOnce: announcement.showOnce ?? false,
       });
     } else {
       setEditingAnnouncement(null);
@@ -130,6 +133,7 @@ export default function AdminAnnouncementsPage() {
         videoUrl: '',
         expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default to 1 week from now
         isActive: true,
+        showOnce: false,
       });
     }
     setIsModalOpen(true);
@@ -214,12 +218,13 @@ export default function AdminAnnouncementsPage() {
                 <TableHead>{t('adminAnnouncementsPage.table.contentType')}</TableHead>
                 <TableHead>{t('adminAnnouncementsPage.table.status')}</TableHead>
                 <TableHead>{t('adminAnnouncementsPage.table.expiryDate')}</TableHead>
+                <TableHead>{t('adminAnnouncementsPage.table.showOnce')}</TableHead>
                 <TableHead className="text-right">{t('adminAnnouncementsPage.table.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {announcements.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="h-24 text-center">{t('adminAnnouncementsPage.noAnnouncements')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="h-24 text-center">{t('adminAnnouncementsPage.noAnnouncements')}</TableCell></TableRow>
               ) : (
                 announcements.map(announcement => (
                   <TableRow key={announcement.id}>
@@ -231,6 +236,9 @@ export default function AdminAnnouncementsPage() {
                        </span>
                     </TableCell>
                     <TableCell>{format(new Date(announcement.expiryDate), language === 'es' ? 'dd/MM/yyyy' : 'MM/dd/yyyy')}</TableCell>
+                    <TableCell className="text-center">
+                      {announcement.showOnce ? <CheckSquare className="h-5 w-5 text-primary" /> : <Square className="h-5 w-5 text-muted-foreground" />}
+                    </TableCell>
                     <TableCell className="text-right space-x-1">
                       <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleOpenModal(announcement)}>
                         <Edit className="h-4 w-4" />
@@ -343,6 +351,15 @@ export default function AdminAnnouncementsPage() {
                     <div className="space-y-0.5">
                       <FormLabel>{t('adminAnnouncementsPage.form.isActive')}</FormLabel>
                       <ShadFormDescription>{t('adminAnnouncementsPage.form.isActiveDescription')}</ShadFormDescription>
+                    </div>
+                    <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+              )} />
+              <FormField control={form.control} name="showOnce" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm mt-4">
+                    <div className="space-y-0.5">
+                      <FormLabel>{t('adminAnnouncementsPage.form.showOnce')}</FormLabel>
+                      <ShadFormDescription>{t('adminAnnouncementsPage.form.showOnceDescription')}</ShadFormDescription>
                     </div>
                     <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>

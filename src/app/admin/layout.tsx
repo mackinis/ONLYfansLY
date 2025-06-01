@@ -25,7 +25,7 @@ import { Film, LayoutDashboard, Video as VideoIconLucide, MessageSquareText, Use
 import * as React from "react";
 import { useTranslation } from '@/context/I18nContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import type { UserProfile } from '@/lib/types';
+import type { UserProfile, ColorSetting } from '@/lib/types';
 import { getAdminProfile } from '@/lib/actions';
 
 export default function AdminLayout({
@@ -36,9 +36,11 @@ export default function AdminLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [openSubMenus, setOpenSubMenus] = React.useState<Record<string, boolean>>({'settings': true});
-  const { t, currentSiteTitle: globalSiteTitle, currentSiteIconUrl: globalSiteIconUrl } = useTranslation(); // Renamed to avoid conflict
+  const { t, siteSettings, currentSiteTitle: globalSiteTitle, currentHeaderIconUrl } = useTranslation();
   const [adminProfile, setAdminProfile] = React.useState<UserProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = React.useState(true);
+  const [avatarPrimaryColor, setAvatarPrimaryColor] = React.useState('D4AF37'); 
+  const [avatarPrimaryFgColor, setAvatarPrimaryFgColor] = React.useState('1A1A1A'); 
 
   const fetchAdminDetails = React.useCallback(async () => {
     setIsLoadingProfile(true);
@@ -63,8 +65,28 @@ export default function AdminLayout({
     return () => {
         window.removeEventListener('adminProfileUpdated', handleProfileUpdate);
     };
-
   }, [fetchAdminDetails]);
+
+  React.useEffect(() => {
+    if (siteSettings?.themeColors) {
+      const primarySetting = siteSettings.themeColors.find(s => s.id === 'primary');
+      const primaryFgSetting = siteSettings.themeColors.find(s => s.id === 'primary-foreground');
+
+      if (primarySetting?.value) {
+        setAvatarPrimaryColor(primarySetting.value.replace('#', ''));
+      } else {
+        
+        const defaultPrimary = siteSettings.themeColors.find(s => s.id === 'primary')?.defaultValueHex || 'D4AF37';
+        setAvatarPrimaryColor(defaultPrimary.replace('#',''));
+      }
+      if (primaryFgSetting?.value) {
+        setAvatarPrimaryFgColor(primaryFgSetting.value.replace('#', ''));
+      } else {
+        const defaultPrimaryFg = siteSettings.themeColors.find(s => s.id === 'primary-foreground')?.defaultValueHex || '1A1A1A';
+        setAvatarPrimaryFgColor(defaultPrimaryFg.replace('#',''));
+      }
+    }
+  }, [siteSettings]);
 
 
   const adminNavItems = [
@@ -92,7 +114,8 @@ export default function AdminLayout({
 
   const handleLogout = () => {
     sessionStorage.removeItem('aurum_is_admin_logged_in');
-    sessionStorage.removeItem('aurum_user_profile'); // Clear admin profile from session too
+    sessionStorage.removeItem('aurum_user_profile');
+    sessionStorage.removeItem('aurum_user_id'); 
     window.dispatchEvent(new Event('aurumLoginStatusChanged'));
     router.push('/login');
   };
@@ -106,6 +129,7 @@ export default function AdminLayout({
     return 'AD';
   };
 
+  const avatarPlaceholderUrl = `https://placehold.co/40x40/${avatarPrimaryColor}/${avatarPrimaryFgColor}?text=${getAdminAvatarFallback()}`;
 
   return (
     <SidebarProvider defaultOpen>
@@ -113,8 +137,8 @@ export default function AdminLayout({
         <Sidebar variant="sidebar" collapsible="icon" className="border-r border-border/60">
           <SidebarHeader className="p-4">
             <Link href="/" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
-              {globalSiteIconUrl ? (
-                <Image src={globalSiteIconUrl} alt={globalSiteTitle || t('adminLayout.sidebarTitle')} width={32} height={32} className="h-8 w-8 rounded-sm" data-ai-hint="logo" />
+              {currentHeaderIconUrl ? (
+                <Image src={currentHeaderIconUrl} alt={globalSiteTitle || t('adminLayout.sidebarTitle')} width={32} height={32} className="h-8 w-8 rounded-sm" data-ai-hint="logo" />
               ) : (
                 <Film className="h-8 w-8 text-primary" />
               )}
@@ -182,7 +206,7 @@ export default function AdminLayout({
               )}
               <Link href="/admin/settings/account">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={adminProfile?.avatarUrl || `https://placehold.co/40x40/D4AF37/1A1A1A?text=${getAdminAvatarFallback()}`} alt={adminProfile?.name || "Admin"} data-ai-hint="admin avatar" />
+                  <AvatarImage src={adminProfile?.avatarUrl || avatarPlaceholderUrl} alt={adminProfile?.name || "Admin"} data-ai-hint="admin avatar" />
                   <AvatarFallback>{getAdminAvatarFallback()}</AvatarFallback>
                 </Avatar>
               </Link>
