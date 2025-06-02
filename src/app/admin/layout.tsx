@@ -26,7 +26,6 @@ import * as React from "react";
 import { useTranslation } from '@/context/I18nContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { UserProfile, ColorSetting } from '@/lib/types';
-// Removed: import { getAdminProfile } from '@/lib/actions';
 
 export default function AdminLayout({
   children,
@@ -42,34 +41,71 @@ export default function AdminLayout({
   const [avatarPrimaryColor, setAvatarPrimaryColor] = React.useState('D4AF37'); 
   const [avatarPrimaryFgColor, setAvatarPrimaryFgColor] = React.useState('1A1A1A'); 
 
+  // Early check for admin login status from sessionStorage
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isAdminLoggedIn = sessionStorage.getItem('aurum_is_admin_logged_in');
+      if (isAdminLoggedIn !== 'true') {
+        router.push('/login');
+      }
+    }
+  }, [router]);
+
   const fetchAdminDetails = React.useCallback(async () => {
     setIsLoadingProfile(true);
     try {
       const response = await fetch('/api/admin/profile');
       if (!response.ok) {
-        throw new Error('Failed to fetch admin profile');
+        console.error('Failed to fetch admin profile, redirecting to login.');
+        router.push('/login'); // Redirect if API call fails
+        return;
       }
-      const profile = await response.json();
-      setAdminProfile(profile);
+      const profile: UserProfile = await response.json();
+      if (profile && profile.role === 'admin') {
+        setAdminProfile(profile);
+      } else {
+        console.error('Fetched profile is not admin or profile is null, redirecting to login.');
+        setAdminProfile(null);
+        router.push('/login'); // Redirect if not admin or profile is null
+      }
     } catch (error) {
       console.error("Failed to fetch admin profile for layout:", error);
       setAdminProfile(null);
+      router.push('/login'); // Redirect on any other error during fetch
     } finally {
       setIsLoadingProfile(false);
     }
-  }, []);
+  }, [router]);
 
   React.useEffect(() => {
-    fetchAdminDetails();
+    // Only fetch admin details if sessionStorage indicates admin is logged in
+    if (typeof window !== 'undefined' && sessionStorage.getItem('aurum_is_admin_logged_in') === 'true') {
+      fetchAdminDetails();
+    } else if (typeof window !== 'undefined') { // If not marked as logged in, but no redirect happened yet, force it
+      router.push('/login');
+    }
     
     const handleProfileUpdate = () => {
-        fetchAdminDetails();
+        if (typeof window !== 'undefined' && sessionStorage.getItem('aurum_is_admin_logged_in') === 'true') {
+            fetchAdminDetails();
+        }
     };
     window.addEventListener('adminProfileUpdated', handleProfileUpdate);
     return () => {
         window.removeEventListener('adminProfileUpdated', handleProfileUpdate);
     };
-  }, [fetchAdminDetails]);
+  }, [fetchAdminDetails, router]);
+
+  // Additional check: if loading is finished and profile is still null, redirect
+  React.useEffect(() => {
+    if (!isLoadingProfile && !adminProfile && typeof window !== 'undefined' && sessionStorage.getItem('aurum_is_admin_logged_in') === 'true') {
+        // This condition means fetchAdminDetails completed but didn't set a valid admin profile,
+        // or it was called when sessionStorage was true, but the backend check failed.
+        console.log('Admin profile not loaded after fetch, redirecting.');
+        router.push('/login');
+    }
+  }, [isLoadingProfile, adminProfile, router]);
+
 
   React.useEffect(() => {
     if (siteSettings?.themeColors) {
@@ -135,6 +171,21 @@ export default function AdminLayout({
   };
 
   const avatarPlaceholderUrl = `https://placehold.co/40x40/${avatarPrimaryColor}/${avatarPrimaryFgColor}?text=${getAdminAvatarFallback()}`;
+  
+  // If still loading profile and no admin profile yet, show loader or minimal layout to prevent flashing content.
+  // This is a basic loading state; could be more sophisticated.
+  if (isLoadingProfile && !adminProfile) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  // If after loading, there's still no admin profile, it means redirection should have happened or is happening.
+  // Rendering null here prevents flashing the admin layout if redirection is imminent.
+  if (!adminProfile) {
+    return null; 
+  }
 
   return (
     <SidebarProvider defaultOpen>
@@ -200,13 +251,14 @@ export default function AdminLayout({
            <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border/60 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:justify-end">
             <SidebarTrigger className="md:hidden" />
             <div className="flex items-center gap-4">
-             {isLoadingProfile ? (
+             {isLoadingProfile && !adminProfile ? ( // Show loader if actively loading and no profile yet
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
              ) : adminProfile ? (
                 <span className="text-sm text-muted-foreground">
                   {t('adminLayout.welcomeAdmin', { adminName: adminProfile.name || 'Admin' })}
                 </span>
               ) : (
+                 // Fallback if profile somehow null after loading (should have redirected)
                  <span className="text-sm text-muted-foreground">{t('adminLayout.welcomeAdmin', { adminName: 'Admin' })}</span>
               )}
               <Link href="/admin/settings/account">
