@@ -2,13 +2,13 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import type { UserProfile, SiteSettings } from '@/lib/types';
+import type { UserProfile } from '@/lib/types';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Users, UserPlus, Search, Edit3, Trash2, CheckCircle, XCircle, Loader2, MessageSquarePlus, MessageSquareOff, VideoOff, Video as VideoIcon } from 'lucide-react';
+import { Users, UserPlus, Search, Edit3, Trash2, CheckCircle, XCircle, Loader2, MessageSquarePlus, MessageSquareOff, BookText, VideoOff, Video as VideoIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -28,12 +28,12 @@ import { cn } from '@/lib/utils';
 
 
 export default function UsersAdminPage() {
-  const { t, siteSettings, refreshSiteSettings, isLoadingSettings } = useTranslation();
+  const { t, siteSettings, refreshSiteSettings, isLoadingSettings: isLoadingContextSettings } = useTranslation();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState<string | null>(null);
-  const [isUpdatingPermission, setIsUpdatingPermission] = useState<string | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true); // For initial page load spinner
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState<string | null>(null); // For individual row status switch
+  const [isUpdatingTestimonialPermission, setIsUpdatingTestimonialPermission] = useState<string | null>(null); // For individual row testimonial permission switch
   const [isUpdatingLiveAuth, setIsUpdatingLiveAuth] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -47,8 +47,8 @@ export default function UsersAdminPage() {
     }
   }, [siteSettings]);
 
-  const fetchUsers = useCallback(async (isInitialFetch = false) => {
-    if (isInitialFetch) {
+  const fetchUsers = useCallback(async (initialLoad = false) => {
+    if (initialLoad) {
       setIsInitialLoading(true);
     }
     try {
@@ -61,15 +61,36 @@ export default function UsersAdminPage() {
     } catch (error) {
       toast({ title: t('adminUsersPage.toasts.fetchErrorTitle'), description: error instanceof Error ? error.message : t('adminUsersPage.toasts.fetchErrorDescription'), variant: 'destructive' });
     } finally {
-      if (isInitialFetch) {
+      if (initialLoad) {
         setIsInitialLoading(false);
       }
     }
-  }, [t, toast]);
+  }, [toast, t]);
 
   useEffect(() => {
-    fetchUsers(true);
-  }, [fetchUsers]);
+    if (localAuthorizedUserId === undefined && localIsStreamForLoggedInOnly === undefined && isLoadingContextSettings) {
+      // Still waiting for siteSettings to initialize local states
+      setIsInitialLoading(true);
+    } else if (localAuthorizedUserId !== undefined && localIsStreamForLoggedInOnly !== undefined) {
+      // Local states are initialized, proceed with fetching users if it's the first time.
+      // We fetch users only once after local states are set to avoid multiple calls if siteSettings changes often.
+      if (isInitialLoading && users.length === 0) { // Check users.length to ensure it's truly initial
+          fetchUsers(true);
+      } else if (!isInitialLoading && users.length === 0 && !isLoadingContextSettings) {
+        // If it's not initial loading (meaning fetchUsers was called), but still no users and context is loaded,
+        // this might be a scenario after a deletion or if the DB is empty. fetchUsers will handle showing "no users".
+        // Or, if we want to ensure initial loading spinner covers this:
+        // fetchUsers(true); // Uncomment if spinner should show until users are fetched or determined empty
+      } else if (!isLoadingContextSettings && users.length > 0) {
+        // If context is loaded and we already have users, no need to set initial loading to false again
+        // unless it was specifically set to true by a manual refresh action.
+        // This mostly handles the case where siteSettings might re-initialize but users are already there.
+        setIsInitialLoading(false);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localAuthorizedUserId, localIsStreamForLoggedInOnly, isLoadingContextSettings, fetchUsers, users.length]);
+
 
   const handleToggleActive = async (userId: string, currentIsActive: boolean) => {
     setIsUpdatingStatus(userId);
@@ -87,18 +108,18 @@ export default function UsersAdminPage() {
           });
           fetchUsers();
       } else {
-          toast({ title: t('adminUsersPage.toasts.errorTitle'), description: result.message || t('adminUsersPage.toasts.genericErrorDescription'), variant: 'destructive' });
+          toast({ title: t('adminUsersPage.toasts.errorTitle'), description: result.message, variant: 'destructive' });
       }
     } catch (error) {
         toast({ title: t('adminUsersPage.toasts.errorTitle'), description: t('adminUsersPage.toasts.genericErrorDescription'), variant: 'destructive' });
     } finally {
-      setIsUpdatingStatus(null);
+        setIsUpdatingStatus(null);
     }
   };
   
   const handleToggleTestimonialPermission = async (userId: string, currentPermission?: boolean) => {
-    setIsUpdatingPermission(userId);
     const newPermission = !currentPermission;
+    setIsUpdatingTestimonialPermission(userId);
     try {
       const response = await fetch(`/api/admin/users/${userId}/testimonial-permission`, {
         method: 'PUT',
@@ -113,12 +134,12 @@ export default function UsersAdminPage() {
           });
           fetchUsers();
       } else {
-          toast({ title: t('adminUsersPage.toasts.errorTitle'), description: result.message || t('adminUsersPage.toasts.genericErrorDescription'), variant: 'destructive' });
+          toast({ title: t('adminUsersPage.toasts.errorTitle'), description: result.message, variant: 'destructive' });
       }
     } catch (error) {
          toast({ title: t('adminUsersPage.toasts.errorTitle'), description: t('adminUsersPage.toasts.genericErrorDescription'), variant: 'destructive' });
     } finally {
-      setIsUpdatingPermission(null);
+        setIsUpdatingTestimonialPermission(null);
     }
   };
 
@@ -139,48 +160,42 @@ export default function UsersAdminPage() {
 
   const handleToggleLiveStreamAuthorization = async (user: UserProfile, newCheckedState: boolean) => {
     setIsUpdatingLiveAuth(user.id);
-    
-    const payload: Partial<SiteSettings> = {};
 
-    if (newCheckedState) { 
-      payload.liveStreamAuthorizedUserId = user.id;
-      payload.liveStreamForLoggedInUsersOnly = false; 
-    } else { 
-      if (localAuthorizedUserId === user.id) { 
-        payload.liveStreamAuthorizedUserId = null;
-      } else {
-        setIsUpdatingLiveAuth(null);
-        return; 
-      }
+    let newAuthorizedUserId: string | null = null;
+    let newLoggedInOnlyStatus: boolean = localIsStreamForLoggedInOnly ?? false;
+
+    if (newCheckedState) { // Switch is turned ON for this user
+      newAuthorizedUserId = user.id;
+      newLoggedInOnlyStatus = false; // Authorizing a specific user implies the stream is not "for all logged-in users"
+    } else { // Switch is turned OFF for this user (was previously authorized)
+      newAuthorizedUserId = null;
+      // Keep current localIsStreamForLoggedInOnly state as it is, this action only revokes specific user
     }
 
     try {
       const response = await fetch('/api/site-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ 
+            liveStreamAuthorizedUserId: newAuthorizedUserId,
+            liveStreamForLoggedInUsersOnly: newLoggedInOnlyStatus // Send the determined status
+        }),
       });
       const result = await response.json();
 
-      if (response.ok && result.success !== false) {
-        setLocalAuthorizedUserId(payload.liveStreamAuthorizedUserId ?? null);
-        if (payload.liveStreamForLoggedInUsersOnly !== undefined) {
-          setLocalIsStreamForLoggedInOnly(payload.liveStreamForLoggedInUsersOnly);
-        }
-        fetchUsers(); // Call fetchUsers to mimic other switches' refresh behavior
-
+      if (response.ok) {
+        setLocalAuthorizedUserId(newAuthorizedUserId);
+        setLocalIsStreamForLoggedInOnly(newLoggedInOnlyStatus);
+        await refreshSiteSettings(); // Refresh global context
+        fetchUsers(); // Refresh users table to ensure consistency visually
         toast({
           title: t('adminUsersPage.toasts.liveAuthSuccessTitle'),
-          description: newCheckedState
+          description: newAuthorizedUserId
             ? t('adminUsersPage.toasts.liveAuthSetSuccess', { userName: `${user.name} ${user.surname}` })
             : t('adminUsersPage.toasts.liveDeauthSuccess'),
         });
       } else {
-        toast({ 
-            title: t('adminUsersPage.toasts.errorTitle'), 
-            description: result.message || t('adminUsersPage.toasts.liveAuthError'), 
-            variant: 'destructive' 
-        });
+        toast({ title: t('adminUsersPage.toasts.errorTitle'), description: result.message || t('adminUsersPage.toasts.liveAuthError'), variant: 'destructive' });
       }
     } catch (error) {
       toast({ title: t('adminUsersPage.toasts.errorTitle'), description: t('adminUsersPage.toasts.liveAuthError'), variant: 'destructive' });
@@ -199,10 +214,13 @@ export default function UsersAdminPage() {
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (isInitialLoading || isLoadingSettings || localAuthorizedUserId === undefined || localIsStreamForLoggedInOnly === undefined) {
+  if (isInitialLoading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
   
+  const renderAuthorizedLiveUserId = localAuthorizedUserId;
+  const renderIsStreamForLoggedInOnly = localIsStreamForLoggedInOnly;
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -250,8 +268,8 @@ export default function UsersAdminPage() {
                  </TableCell></TableRow>
               ) : (
                 filteredUsers.map(user => {
-                  const isThisUserCurrentlyAuthorizedForLive = localAuthorizedUserId === user.id && !localIsStreamForLoggedInOnly;
-                  const disableIndividualAuthSwitch = localIsStreamForLoggedInOnly === true;
+                  const isThisUserAuthorizedForLive = renderAuthorizedLiveUserId === user.id && !renderIsStreamForLoggedInOnly;
+                  const disableSpecificAuthButton = renderIsStreamForLoggedInOnly === true; 
 
                   return (
                     <TableRow key={user.id}>
@@ -259,7 +277,7 @@ export default function UsersAdminPage() {
                       <TableCell>{user.email}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center">
-                             <VideoIcon className="h-4 w-4 mr-1 text-muted-foreground"/> 
+                             <BookText className="h-4 w-4 mr-1 text-muted-foreground"/> 
                             {user.testimonialCount ?? 0}
                         </div>
                       </TableCell>
@@ -279,14 +297,13 @@ export default function UsersAdminPage() {
                             id={`user-status-${user.id}`}
                             checked={user.isActive}
                             onCheckedChange={() => handleToggleActive(user.id, user.isActive)}
-                            aria-label={t('adminUsersPage.toggleActivationAria', { email: user.email })}
                             disabled={isUpdatingStatus === user.id}
+                            aria-label={t('adminUsersPage.toggleActivationAria', { email: user.email })}
                           />
-                          {isUpdatingStatus === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> : (
-                            <Label htmlFor={`user-status-${user.id}`} className={user.isActive ? 'text-green-500' : 'text-red-500'}>
-                              {user.isActive ? t('adminUsersPage.status.active') : t('adminUsersPage.status.inactive')}
-                            </Label>
-                          )}
+                          {isUpdatingStatus === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> :
+                          <Label htmlFor={`user-status-${user.id}`} className={user.isActive ? 'text-green-500' : 'text-red-500'}>
+                            {user.isActive ? t('adminUsersPage.status.active') : t('adminUsersPage.status.inactive')}
+                          </Label>}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -295,26 +312,30 @@ export default function UsersAdminPage() {
                                 id={`testimonial-permission-${user.id}`}
                                 checked={user.canSubmitTestimonial || false}
                                 onCheckedChange={() => handleToggleTestimonialPermission(user.id, user.canSubmitTestimonial)}
+                                disabled={isUpdatingTestimonialPermission === user.id}
                                 aria-label={t('adminUsersPage.toggleTestimonialPermissionAria', { email: user.email })}
-                                disabled={isUpdatingPermission === user.id}
                             />
-                            {isUpdatingPermission === user.id ? <Loader2 className="ml-2 h-5 w-5 animate-spin" /> : (
-                                user.canSubmitTestimonial ? <MessageSquarePlus className="ml-2 h-5 w-5 text-green-500" /> : <MessageSquareOff className="ml-2 h-5 w-5 text-red-500" />
-                            )}
+                             {isUpdatingTestimonialPermission === user.id ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> :
+                             (user.canSubmitTestimonial ? <MessageSquarePlus className="ml-2 h-5 w-5 text-green-500" /> : <MessageSquareOff className="ml-2 h-5 w-5 text-red-500" />)}
                          </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Switch
-                            id={`live-auth-${user.id}`}
-                            checked={isThisUserCurrentlyAuthorizedForLive}
-                            onCheckedChange={(newCheckedState) => handleToggleLiveStreamAuthorization(user, newCheckedState)}
-                            disabled={isUpdatingLiveAuth === user.id || disableIndividualAuthSwitch}
-                            aria-label={t('adminUsersPage.toggleLiveAuthAria', { userName: `${user.name} ${user.surname}` })}
-                            title={disableIndividualAuthSwitch ? t('adminUsersPage.toasts.specificAuthDisabledTooltip') : ''}
-                          />
-                          {isUpdatingLiveAuth === user.id && <Loader2 className="h-4 w-4 animate-spin" />}
-                        </div>
+                        <Switch
+                          id={`live-auth-switch-${user.id}`}
+                          checked={isThisUserAuthorizedForLive}
+                          onCheckedChange={(newCheckedState) => handleToggleLiveStreamAuthorization(user, newCheckedState)}
+                          disabled={isUpdatingLiveAuth === user.id || disableSpecificAuthButton}
+                          className={cn(
+                            disableSpecificAuthButton && "cursor-not-allowed opacity-50"
+                          )}
+                          aria-label={t('adminUsersPage.toggleLiveAuthAria', { userName: `${user.name} ${user.surname}` })}
+                          title={
+                            disableSpecificAuthButton
+                              ? t('adminUsersPage.toasts.specificAuthDisabledTooltip')
+                              : t('adminUsersPage.toggleLiveAuthAria', { userName: `${user.name} ${user.surname}` })
+                          }
+                        />
+                        {isUpdatingLiveAuth === user.id && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />}
                       </TableCell>
                       <TableCell className="text-right space-x-1">
                         <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => openEditModal(user)}>
@@ -354,4 +375,3 @@ export default function UsersAdminPage() {
   );
 }
 
-    
