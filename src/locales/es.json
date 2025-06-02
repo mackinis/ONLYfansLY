@@ -355,7 +355,7 @@
       "unknownError": "Ocurrió un error desconocido."
     }
   },
-   "adminUsersPage": {
+  "adminUsersPage": {
     "title": "Gestión de Usuarios",
     "addUserButton": "Agregar Nuevo Usuario",
     "listTitle": "Cuentas de Usuario",
@@ -374,9 +374,8 @@
       "authorizeLive": "Acceso Vivo Privado",
       "actions": "Acciones"
     },
-    "authorizeButton": "Autorizar para Vivo Privado",
-    "deauthorizeButton": "Revocar / Hacer Público",
-    "currentlyAuthorizedForLive": "Autorizado para Transmisión en Vivo",
+    "toggleLiveAuthAria": "Alternar autorización de transmisión en vivo privada para {{userName}}",
+    "currentlyAuthorizedForLive": "Autorizado",
     "toggleActivationAria": "Alternar activación para {email}",
     "toggleTestimonialPermissionAria": "Alternar permiso de testimonio para {email}",
     "status": {
@@ -408,11 +407,11 @@
       "comingSoonTitle": "Próximamente",
       "editUserComingSoon": "La funcionalidad de edición de usuario estará disponible pronto.",
       "addUserComingSoon": "La funcionalidad para agregar usuarios estará disponible pronto.",
-      "liveAuthSetSuccess": "Usuario {userName} ahora está autorizado para la transmisión en vivo privada.",
-      "liveDeauthSuccess": "Autorización de transmisión en vivo eliminada. La transmisión es ahora pública.",
+      "liveAuthSetSuccess": "Usuario {userName} ahora está autorizado para transmisión en vivo privada.",
+      "liveDeauthSuccess": "Autorización de transmisión en vivo privada revocada.",
       "liveAuthError": "Error al actualizar la autorización de transmisión en vivo.",
       "liveAuthSuccessTitle": "Autorización Actualizada",
-      "specificAuthDisabledTooltip": "Deshabilitado porque 'Solo para usuarios registrados' está activo."
+      "specificAuthDisabledTooltip": "Deshabilitado porque el acceso 'Solo para usuarios registrados' está activo."
     }
   },
   "adminTestimonialsPage": {
@@ -1159,5 +1158,3 @@
     }
   }
 }
-
-    

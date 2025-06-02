@@ -17,7 +17,7 @@
       "verified": "Verified",
       "status": "Status",
       "canSubmitTestimonial": "Testimonials",
-      "authorizeLive": "Authorize Live",
+      "authorizeLive": "Private Live Access",
       "actions": "Actions"
     },
     "status": {
@@ -50,14 +50,13 @@
       "editUserComingSoon": "User editing will be available soon.",
       "addUserComingSoon": "User addition will be available soon.",
       "liveAuthSuccessTitle": "Authorization Updated",
-      "liveAuthSetSuccess": "User {{userName}} authorized for Live Stream",
-      "liveDeauthSuccess": "User deauthorized for Live Stream",
+      "liveAuthSetSuccess": "User {{userName}} is now authorized for private live stream.",
+      "liveDeauthSuccess": "Private live stream authorization revoked.",
       "liveAuthError": "Failed to update live stream authorization.",
-      "specificAuthDisabledTooltip": "Disabled because 'Logged-in users only' is active."
+      "specificAuthDisabledTooltip": "Disabled because 'Logged-in users only' stream access is active."
     },
-    "authorizeButton": "Authorize",
-    "deauthorizeButton": "Deauthorize",
-    "currentlyAuthorizedForLive": "Authorized for Live"
+    "toggleLiveAuthAria": "Toggle private live stream authorization for {{userName}}",
+    "currentlyAuthorizedForLive": "Authorized"
   },
   "adminGeneralPage": {
     "toasts": {
@@ -77,5 +76,3 @@
     }
   }
 }
-
-    
