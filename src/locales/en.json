@@ -74,5 +74,186 @@
       "settingsSavedTitle": "Settings saved",
       "settingsSavedDescription": "Live Stream settings updated successfully."
     }
+  },
+  "footer": {
+    "mobileAppsSectionTitle": "Our Apps",
+    "downloadAndroidApp": "Get it on Google Play",
+    "downloadIosApp": "Download on the App Store",
+    "androidAppIconAlt": "Android App Icon",
+    "iosAppIconAlt": "iOS App Icon"
+  },
+  "adminLivestream": {
+    "pageTitle": "Live Stream Control",
+    "defaultStreamTitle": "Aurum Live Event",
+    "defaultOfflineMessage": "Live stream is currently offline. Check back soon!",
+    "configCard": {
+      "title": "Stream Setup",
+      "description": "Manage your live stream settings and status.",
+      "statusLabel": "Live Status",
+      "toggleStreamAriaLabel": "Toggle live stream status",
+      "statusLive": "LIVE",
+      "statusOffline": "OFFLINE",
+      "currentLiveTitleLabel": "Current Live Stream Title",
+      "titlePlaceholder": "Enter your stream title",
+      "currentLiveTitleHelpText": "This title is sent to viewers if you are live. Updates in real-time.",
+      "currentLiveSubtitleLabel": "Current Live Stream Subtitle (Optional)",
+      "subtitlePlaceholder": "Enter a short subtitle for the live stream",
+      "currentLiveSubtitleHelpText": "An optional subtitle displayed with the live stream title.",
+      "defaultTitleLabel": "Default Stream Title (Persistent)",
+      "defaultTitlePlaceholder": "e.g., Weekly Q&A",
+      "defaultTitleHelpText": "This title will be shown by default and when the stream is offline. Saved in site settings.",
+      "offlineMessageLabel": "Offline Stream Message (Persistent)",
+      "offlineMessagePlaceholder": "e.g., Next stream Friday at 8 PM!",
+      "offlineMessageHelpText": "This message is displayed on the homepage when the stream is offline. Saved in site settings.",
+      "cameraPermissionDeniedAlert": {
+        "title": "Camera Access Denied",
+        "description": "Please grant camera and microphone permissions in your browser settings to start streaming."
+      },
+      "cameraPreviewTitle": "Camera Preview",
+      "cameraNotDetectedAlert": {
+        "title": "Camera Not Detected or Preview Off",
+        "description": "If you intend to stream, ensure your camera is connected and toggle the stream on. The preview will appear here when streaming is active."
+      },
+      "saveSettingsButton": "Save Persistent Settings",
+      "muteMicButton": "Mute Mic",
+      "unmuteMicButton": "Unmute Mic",
+      "muteLocalAudioButton": "Mute Preview",
+      "unmuteLocalAudioButton": "Unmute Preview Audio",
+      "privateStreamToggleLabel": "Private Stream",
+      "privateStreamToggleDescription": "Only the specifically authorized user can view. If off, stream is public.",
+      "authorizedUserLabel": "Authorized User:",
+      "noUserAuthorized": "Public / No specific user authorized."
+    },
+    "streamControlCard": {
+      "startStreamButton": "Start General Stream",
+      "stopStreamButton": "Stop General Stream"
+    },
+    "statsCard": {
+      "title": "Stream Stats",
+      "description": "Current number of viewers on your live stream.",
+      "viewersLabel": "Viewers"
+    },
+    "toast": {
+      "socketConnectedTitle": "Socket Connected",
+      "socketConnectedDescription": "Successfully connected to signaling server.",
+      "streamErrorTitle": "Stream Error",
+      "setRemoteDescriptionError": "Failed to set remote description for viewer {viewerId}.",
+      "viewerConnectedTitle": "Viewer Update",
+      "viewerWaitingForStream": "Viewer {viewerId} is waiting for stream to start.",
+      "newViewerTitle": "New Viewer",
+      "newViewerDescription": "Viewer {viewerId} has joined the stream.",
+      "createOfferError": "Failed to create offer for viewer {viewerId}.",
+      "viewerLeftTitle": "Viewer Left",
+      "viewerLeftDescription": "Viewer {viewerId} has left the stream.",
+      "socketDisconnectedTitle": "Socket Disconnected",
+      "socketDisconnectedStreamInterrupt": "Disconnected from signaling. Stream may be interrupted.",
+      "cameraAccessDeniedTitle": "Camera Access Denied",
+      "cameraAccessDeniedDescription": "Please grant camera and microphone permissions to stream.",
+      "unsupportedBrowserTitle": "Browser Not Supported",
+      "unsupportedBrowserDescription": "Your browser does not support the necessary features for streaming.",
+      "errorTitle": "Error",
+      "genericError": "An unexpected error occurred.",
+      "socketNotConnectedError": "Socket not connected. Cannot toggle stream.",
+      "streamStoppedTitle": "Stream Stopped",
+      "streamStoppedDescription": "The live stream has been stopped.",
+      "streamStartingTitle": "Starting Stream",
+      "publicStreamInfo": "The stream is configured as public.",
+      "loggedInOnlyStreamInfo": "The stream is for logged-in users only.",
+      "settingsSavedTitle": "Settings Saved",
+      "persistentSettingsSavedDescription": "Default stream title and offline message have been saved to global site settings.",
+      "microphoneStatusTitle": "Microphone Status",
+      "microphoneMuted": "Microphone muted for viewers.",
+      "microphoneUnmuted": "Microphone unmuted for viewers.",
+      "localAudioStatusTitle": "Local Preview Audio",
+      "localAudioMuted": "Local preview audio muted.",
+      "localAudioUnmuted": "Local preview audio unmuted.",
+      "privateStreamInfo": "The stream is configured as private for {userName}.",
+      "privateStreamNoUserWarning": "Warning: Stream is private but NO user is authorized. It will be inaccessible.",
+      "loggedInOnlyClearsSpecificUser": "Enabling 'Logged-in users only' will override any specific user authorization for this stream.",
+      "callUserDisconnected": "User disconnected from the call.",
+      "callEndedByAdmin": "Call ended by administrator."
+    },
+    "startPrivateCallButton": "Start Private Video Call",
+    "endPrivateCallButton": "End Video Call",
+    "privateCall": {
+      "cardTitle": "Private Video Call",
+      "cannotStartTitle": "Cannot Start Call",
+      "noUserConfigured": "No specific user is configured for private calls, or the user is not connected.",
+      "noUserConnected": "The authorized user is not currently connected or no user is authorized in site settings.",
+      "statusConnecting": "Connecting to {userName}...",
+      "statusConnected": "Connected with {userName}",
+      "statusEnded": "Video call ended.",
+      "statusFailed": "Failed to connect video call.",
+      "statusIncoming": "Incoming call from Administrator...",
+      "statusWaitingForUser": "Waiting for authorized user to connect...",
+      "statusUserConnected": "Connected",
+      "statusUserDisconnected": "Disconnected",
+      "callEndedTitle": "Call Ended",
+      "adminEndedCallDesc": "The administrator has ended the video call.",
+      "cameraPermissionErrorTitle": "Camera/Mic Error",
+      "cameraPermissionErrorDescription": "Please grant permissions for camera and microphone to join the call."
+    },
+    "userLocalVideoLabel": "Your Video (Admin)",
+    "remoteUserVideoLabel": "User's Video",
+    "videoArea": {
+      "title": "Live Stream Display",
+      "offlineMessage": "Stream is Offline. Start a stream or private call to see video here.",
+      "startingCamera": "Starting camera..."
+    },
+    "persistentSettings": {
+      "title": "Persistent Settings",
+      "description": "These settings are saved globally and persist across sessions."
+    }
+  },
+  "homepage": {
+    "hero": {
+      "title": "Discover Aurum Media",
+      "subtitle": "Immerse yourself in a curated collection of premium video content, designed to inspire and captivate.",
+      "exploreButton": "Explore Courses"
+    },
+    "live": {
+      "defaultTitle": "Live Event",
+      "broadcastingNow": "Broadcasting Live Now!",
+      "currentlyOffline": "The live stream is currently offline. Check back soon!",
+      "waitingForStream": "Waiting for video stream...",
+      "connecting": "Connecting to live stream service...",
+      "statusOffline": "Coming Soon!",
+      "streamingIssueTitle": "Streaming Issue",
+      "broadcasterDisconnectedError": "The live stream has ended as the broadcaster disconnected.",
+      "connectionLostError": "Connection to the stream was lost. The broadcaster may have disconnected or there's a network issue.",
+      "webrtcSetupError": "Could not establish WebRTC connection",
+      "iceCandidateError": "Error adding ICE candidate",
+      "accessDenied": "Stream Access Denied",
+      "accessDeniedDescription": "You do not have permission to view this live stream. It might be for registered users only."
+    },
+    "courses": {
+      "title": "Featured",
+      "titleHighlight": "Courses",
+      "noCourses": "No courses available at the moment. Check back soon!"
+    },
+    "testimonials": {
+      "title": "User",
+      "titleHighlight": "Stories"
+    },
+    "privateCall": {
+      "title": "Private Video Call",
+      "statusIncoming": "Incoming video call from Administrator...",
+      "statusConnecting": "Connecting video call...",
+      "statusConnected": "Video call connected with Administrator.",
+      "statusEnded": "Video call ended.",
+      "statusFailed": "Failed to connect video call.",
+      "cameraError": "Could not access camera/microphone. Please check permissions.",
+      "endCallButton": "End Call",
+      "muteMic": "Mute Mic",
+      "unmuteMic": "Unmute Mic",
+      "stopVideo": "Stop Video",
+      "startVideo": "Start Video",
+      "yourVideoLabel": "Your Video",
+      "adminVideoLabel": "Administrator's Video",
+      "callEndedTitle": "Call Ended",
+      "adminEndedCallDesc": "The administrator has ended the video call.",
+      "cameraPermissionErrorTitle": "Camera/Microphone Error",
+      "cameraPermissionErrorDescription": "Please grant permission to use your camera and microphone for the video call."
+    }
   }
 }

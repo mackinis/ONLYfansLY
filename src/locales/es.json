@@ -101,7 +101,9 @@
       "broadcasterDisconnectedError": "La transmisión en vivo ha finalizado ya que el transmisor se desconectó.",
       "connectionLostError": "Se perdió la conexión con la transmisión. El transmisor podría haberse desconectado o hay un problema de red.",
       "webrtcSetupError": "No se pudo establecer la conexión WebRTC",
-      "iceCandidateError": "Error al agregar candidato ICE"
+      "iceCandidateError": "Error al agregar candidato ICE",
+      "accessDenied": "Acceso al Stream Denegado",
+      "accessDeniedDescription": "No tienes permiso para ver esta transmisión en vivo. Podría ser solo para usuarios registrados."
     },
     "courses": {
       "title": "Cursos",
@@ -111,6 +113,26 @@
     "testimonials": {
       "title": "Historias",
       "titleHighlight": ""
+    },
+    "privateCall": {
+      "title": "Videollamada Privada",
+      "statusIncoming": "Videollamada entrante del Administrador...",
+      "statusConnecting": "Conectando videollamada...",
+      "statusConnected": "Videollamada conectada con el Administrador.",
+      "statusEnded": "Videollamada finalizada.",
+      "statusFailed": "Fallo al conectar la videollamada.",
+      "cameraError": "No se pudo acceder a la cámara/micrófono. Revisa los permisos.",
+      "endCallButton": "Finalizar Llamada",
+      "muteMic": "Silenciar Mic",
+      "unmuteMic": "Activar Mic",
+      "stopVideo": "Detener Video",
+      "startVideo": "Iniciar Video",
+      "yourVideoLabel": "Tu Video",
+      "adminVideoLabel": "Video del Administrador",
+      "callEndedTitle": "Llamada Finalizada",
+      "adminEndedCallDesc": "El administrador ha finalizado la videollamada.",
+      "cameraPermissionErrorTitle": "Error de Cámara/Micrófono",
+      "cameraPermissionErrorDescription": "Por favor, otorga permisos para usar tu cámara y micrófono para la videollamada."
     }
   },
   "curatedTestimonials": {
@@ -224,6 +246,9 @@
       "currentLiveTitleLabel": "Título Actual de Transmisión en Vivo",
       "titlePlaceholder": "Ingresa el título de tu transmisión",
       "currentLiveTitleHelpText": "Este título se envía a los espectadores si estás transmitiendo en vivo. Se actualiza en tiempo real.",
+      "currentLiveSubtitleLabel": "Subtítulo Actual de Transmisión en Vivo (Opcional)",
+      "subtitlePlaceholder": "Ingresa un subtítulo corto para la transmisión",
+      "currentLiveSubtitleHelpText": "Un subtítulo opcional que se muestra con el título de la transmisión en vivo.",
       "defaultTitleLabel": "Título de Transmisión Predeterminado (Persistente)",
       "defaultTitlePlaceholder": "Ej: Preguntas y Respuestas Semanales",
       "defaultTitleHelpText": "Este título se mostrará por defecto y cuando la transmisión esté desconectada. Guardado en la configuración del sitio.",
@@ -246,10 +271,12 @@
       "unmuteLocalAudioButton": "Activar Sonido Vista Previa",
       "privateStreamToggleLabel": "Transmisión Privada",
       "privateStreamToggleDescription": "Solo el usuario específicamente autorizado puede ver. Si está apagado, la transmisión es pública.",
-      "authorizedUserLabel": "Usuario Autorizado para Transmisión Privada:",
-      "noUserAuthorized": "Ninguno (la transmisión será pública si no hay usuario autorizado seleccionado en la página de Usuarios)",
-      "configCard.authorizedUserLabel": "Usuario Autorizado:",
-      "configCard.noUserAuthorized": "Pública / Ningún usuario específico autorizado."
+      "authorizedUserLabel": "Usuario Autorizado:",
+      "noUserAuthorized": "Pública / Ningún usuario específico autorizado."
+    },
+    "streamControlCard": {
+      "startStreamButton": "Iniciar Transmisión General",
+      "stopStreamButton": "Detener Transmisión General"
     },
     "statsCard": {
       "title": "Estadísticas de Transmisión",
@@ -280,7 +307,8 @@
       "streamStoppedTitle": "Transmisión Detenida",
       "streamStoppedDescription": "La transmisión en vivo ha sido detenida.",
       "streamStartingTitle": "Iniciando Transmisión",
-      "streamStartingDescription": "La transmisión en vivo está comenzando...",
+      "publicStreamInfo": "La transmisión está configurada como pública.",
+      "loggedInOnlyStreamInfo": "La transmisión es solo para usuarios registrados.",
       "settingsSavedTitle": "Configuración Guardada",
       "persistentSettingsSavedDescription": "El título de transmisión predeterminado y el mensaje sin conexión se han guardado en la configuración global del sitio.",
       "microphoneStatusTitle": "Estado del Micrófono",
@@ -291,9 +319,40 @@
       "localAudioUnmuted": "Audio de vista previa local activado.",
       "privateStreamInfo": "La transmisión está configurada como privada para {userName}.",
       "privateStreamNoUserWarning": "Advertencia: La transmisión está configurada como privada, pero NINGÚN usuario está autorizado. Será inaccesible.",
-      "publicStreamInfo": "La transmisión está configurada como pública.",
-      "loggedInOnlyStreamInfo": "La transmisión es solo para usuarios registrados.",
-      "loggedInOnlyClearsSpecificUser": "Activar 'Solo para usuarios registrados' anulará cualquier autorización de usuario específico para esta transmisión."
+      "loggedInOnlyClearsSpecificUser": "Activar 'Solo para usuarios registrados' anulará cualquier autorización de usuario específico para esta transmisión.",
+      "callUserDisconnected": "Usuario desconectado de la llamada.",
+      "callEndedByAdmin": "Llamada finalizada por el administrador."
+    },
+    "startPrivateCallButton": "Iniciar Videollamada Privada",
+    "endPrivateCallButton": "Finalizar Videollamada",
+    "privateCall": {
+        "cardTitle": "Videollamada Privada",
+        "cannotStartTitle": "No se puede iniciar la llamada",
+        "noUserConfigured": "No hay un usuario específico configurado para llamadas privadas, o el usuario no está conectado.",
+        "noUserConnected": "El usuario autorizado no está actualmente conectado o no hay ningún usuario autorizado en la configuración del sitio.",
+        "statusConnecting": "Conectando con {userName}...",
+        "statusConnected": "Conectado con {userName}",
+        "statusEnded": "Videollamada finalizada.",
+        "statusFailed": "Fallo al conectar videollamada.",
+        "statusIncoming": "Llamada entrante del Administrador...",
+        "statusWaitingForUser": "Esperando conexión del usuario autorizado...",
+        "statusUserConnected": "Conectado",
+        "statusUserDisconnected": "Desconectado",
+        "callEndedTitle": "Llamada Finalizada",
+        "adminEndedCallDesc": "El administrador ha finalizado la videollamada.",
+        "cameraPermissionErrorTitle": "Error de Cámara/Micrófono",
+        "cameraPermissionErrorDescription": "Por favor, otorga permisos para usar tu cámara y micrófono para unirte a la llamada."
+    },
+    "userLocalVideoLabel": "Tu Video (Admin)",
+    "remoteUserVideoLabel": "Video del Usuario",
+    "videoArea": {
+      "title": "Visualizador de Transmisión en Vivo",
+      "offlineMessage": "Transmisión Desconectada. Inicia una transmisión o llamada privada para ver video aquí.",
+      "startingCamera": "Iniciando cámara..."
+    },
+    "persistentSettings": {
+      "title": "Configuraciones Persistentes",
+      "description": "Estas configuraciones se guardan globalmente y persisten entre sesiones."
     }
   },
   "adminCoursesPage": {
