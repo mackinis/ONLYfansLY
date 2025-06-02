@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { UserCircle, Save, Loader2, Image as ImageIcon } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
-import { getAdminProfile, updateAdminProfile } from '@/lib/actions';
+// Removed: import { getAdminProfile, updateAdminProfile } from '@/lib/actions';
 import type { UserProfile } from '@/lib/types';
 import { useTranslation } from '@/context/I18nContext';
 import NextImage from 'next/image'; // Renombrado para evitar conflicto
@@ -62,7 +62,6 @@ export default function AdminAccountSettingsPage() {
 
   useEffect(() => {
     if (watchedAvatarUrl) {
-      // Basic validation to check if it looks like an image URL
       if (/\.(jpeg|jpg|gif|png|webp)$/i.test(watchedAvatarUrl)) {
         setAvatarPreview(watchedAvatarUrl);
       } else {
@@ -77,13 +76,18 @@ export default function AdminAccountSettingsPage() {
     async function fetchAdmin() {
       setIsLoading(true);
       try {
-        const profile = await getAdminProfile();
+        const response = await fetch('/api/admin/profile');
+        if (!response.ok) {
+          throw new Error(await response.text() || t('adminAccountPage.toasts.fetchErrorDescription'));
+        }
+        const profile: UserProfile = await response.json();
+        
         if (profile) {
           setAdminUser(profile);
           form.reset({
             name: profile.name || '',
             surname: profile.surname || '',
-            email: profile.email,
+            email: profile.email, // Email is part of UserProfile type
             avatarUrl: profile.avatarUrl || '',
             phone: profile.phone || '',
             dni: profile.dni || '',
@@ -109,25 +113,32 @@ export default function AdminAccountSettingsPage() {
   async function onSubmit(data: AdminProfileFormValues) {
     if (!adminUser) return;
     setIsSubmitting(true);
-    const { email, ...updateData } = data;
+    const { email, ...updateData } = data; // Email is readonly, not part of update payload
     try {
-      const result = await updateAdminProfile(adminUser.id, updateData);
-      if (result.success) {
-        toast({ title: t('adminAccountPage.toasts.updateSuccessTitle'), description: result.message });
-        // Dispatch an event to notify layout to update avatar if it changed
-        if (data.avatarUrl !== adminUser.avatarUrl) {
-            window.dispatchEvent(new CustomEvent('adminProfileUpdated', { detail: { avatarUrl: data.avatarUrl }}));
-        }
-        // Optionally re-fetch admin data or update local state if needed
-         const updatedProfile = await getAdminProfile();
-         if (updatedProfile) setAdminUser(updatedProfile);
+      const response = await fetch(`/api/admin/profile`, { // Using adminUser.id in URL
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updateData, adminId: adminUser.id }), // Pass adminId if your API expects it, or remove if API fetches it
+      });
+      const result = await response.json();
 
+      if (response.ok && result.success) {
+        toast({ title: t('adminAccountPage.toasts.updateSuccessTitle'), description: result.message });
+        if (data.avatarUrl !== adminUser.avatarUrl || data.name !== adminUser.name) {
+            window.dispatchEvent(new CustomEvent('adminProfileUpdated', { detail: { avatarUrl: data.avatarUrl, name: data.name }}));
+        }
+        // Re-fetch or update local state if necessary
+        const updatedProfileResponse = await fetch('/api/admin/profile');
+        if (updatedProfileResponse.ok) {
+            const updatedProfile = await updatedProfileResponse.json();
+            setAdminUser(updatedProfile);
+        }
       } else {
-        toast({ title: t('adminAccountPage.toasts.updateErrorTitle'), description: result.message, variant: 'destructive' });
+        toast({ title: t('adminAccountPage.toasts.updateErrorTitle'), description: result.message || t('adminAccountPage.toasts.genericError'), variant: 'destructive' });
         if (result.errors) {
             Object.entries(result.errors).forEach(([field, errors]) => {
-             if (errors && errors.length > 0) {
-                form.setError(field as keyof AdminProfileFormValues, { message: errors[0] });
+             if (Array.isArray(errors) && errors.length > 0) { // Check if errors is an array
+                form.setError(field as keyof AdminProfileFormValues, { message: errors[0] as string });
              }
           });
         }
@@ -164,7 +175,7 @@ export default function AdminAccountSettingsPage() {
         </CardHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <CardContent className="space-y-6 max-h-[70vh] overflow-y-auto pr-2"> {/* Increased max-h slightly */}
+            <CardContent className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField control={form.control} name="name" render={({ field }) => (
                   <FormItem><FormLabel>{t('adminAccountPage.form.name')}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -188,7 +199,7 @@ export default function AdminAccountSettingsPage() {
                 <div className="mt-2">
                   <NextImage src={avatarPreview} alt="Avatar Preview" width={80} height={80} className="rounded-full object-cover border border-border" data-ai-hint="avatar preview"/>
                 </div>
-              ) : watchedAvatarUrl && !form.formState.errors.avatarUrl ? ( // Show placeholder if URL is entered but not valid image or no preview
+              ) : watchedAvatarUrl && !form.formState.errors.avatarUrl ? (
                 <div className="mt-2 flex items-center justify-center w-20 h-20 rounded-full bg-muted border border-border">
                     <ImageIcon className="h-10 w-10 text-muted-foreground" />
                 </div>

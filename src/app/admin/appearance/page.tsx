@@ -11,7 +11,6 @@ import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
 import { type ColorSetting, defaultThemeColorsHex } from '@/lib/config';
 import { hexToHslString } from '@/lib/utils';
-import { updateSiteSettings } from '@/lib/actions'; // Import updateSiteSettings
 
 export default function AppearanceAdminPage() {
   const { t, siteSettings, isLoadingSettings, refreshSiteSettings } = useTranslation();
@@ -30,20 +29,16 @@ export default function AppearanceAdminPage() {
 
   useEffect(() => {
     if (!isLoadingSettings && siteSettings?.themeColors) {
-      // Merge DB colors with defaults to ensure all settings are present
-      // and to pick up new default settings if they were added.
       const mergedSettings = defaultThemeColorsHex.map(defaultSetting => {
         const dbSetting = siteSettings.themeColors.find(s => s.id === defaultSetting.id);
-        // Ensure value is a valid HEX, otherwise use default.
         const value = dbSetting?.value && /^#[0-9A-Fa-f]{6}$/.test(dbSetting.value)
                         ? dbSetting.value
                         : defaultSetting.defaultValueHex;
         return { ...defaultSetting, value };
       });
       setColorSettings(mergedSettings);
-      applyThemeToDocument(mergedSettings); // Apply loaded theme on initial load of this page
+      applyThemeToDocument(mergedSettings); 
     } else if (!isLoadingSettings && !siteSettings?.themeColors) {
-      // If no themeColors in DB, use defaults and apply them.
       const defaults = defaultThemeColorsHex.map(c => ({ ...c, value: c.defaultValueHex }));
       setColorSettings(defaults);
       applyThemeToDocument(defaults);
@@ -56,7 +51,7 @@ export default function AppearanceAdminPage() {
       const newSettings = prevSettings.map(setting =>
         setting.id === id ? { ...setting, value: newValueHex.toUpperCase() } : setting
       );
-      applyThemeToDocument(newSettings); // Live preview on this page
+      applyThemeToDocument(newSettings); 
       return newSettings;
     });
   };
@@ -64,18 +59,24 @@ export default function AppearanceAdminPage() {
   const handleSaveChanges = async () => {
     setIsSubmitting(true);
     try {
-      const result = await updateSiteSettings({ themeColors: colorSettings });
-      if (result.success) {
+      const response = await fetch('/api/site-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themeColors: colorSettings }),
+      });
+      const result = await response.json();
+
+      if (response.ok) {
         toast({
           title: t('adminAppearancePage.toasts.updateTitle'),
-          description: t('adminAppearancePage.toasts.updateDescription'),
+          description: result.message || t('adminAppearancePage.toasts.updateDescription'),
         });
-        await refreshSiteSettings(); // Refresh global site settings
+        await refreshSiteSettings(); 
       } else {
-        toast({ title: "Error", description: result.message || "Failed to save settings.", variant: "destructive" });
+        toast({ title: t('adminAppearancePage.toasts.errorTitle', {defaultValue: "Error"}), description: result.message || "Failed to save settings.", variant: "destructive" });
       }
     } catch (error) {
-      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
+      toast({ title: t('adminAppearancePage.toasts.errorTitle', {defaultValue: "Error"}), description: "An unexpected error occurred.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -85,25 +86,31 @@ export default function AppearanceAdminPage() {
     setIsSubmitting(true);
     const defaultsToSave = defaultThemeColorsHex.map(setting => ({
       ...setting,
-      value: setting.defaultValueHex // Ensure 'value' is set to the default HEX
+      value: setting.defaultValueHex 
     }));
     
-    setColorSettings(defaultsToSave); // Update local state for inputs
-    applyThemeToDocument(defaultsToSave); // Apply defaults for live preview
+    setColorSettings(defaultsToSave); 
+    applyThemeToDocument(defaultsToSave); 
 
     try {
-      const result = await updateSiteSettings({ themeColors: defaultsToSave });
-      if (result.success) {
+      const response = await fetch('/api/site-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themeColors: defaultsToSave }),
+      });
+      const result = await response.json();
+
+      if (response.ok) {
         toast({
           title: t('adminAppearancePage.toasts.resetTitle'),
-          description: t('adminAppearancePage.toasts.resetDescription'),
+          description: result.message || t('adminAppearancePage.toasts.resetDescription'),
         });
-        await refreshSiteSettings(); // Refresh global site settings
+        await refreshSiteSettings(); 
       } else {
-        toast({ title: "Error", description: result.message || "Failed to reset settings.", variant: "destructive" });
+        toast({ title: t('adminAppearancePage.toasts.errorTitle', {defaultValue: "Error"}), description: result.message || "Failed to reset settings.", variant: "destructive" });
       }
     } catch (error) {
-      toast({ title: "Error", description: "An unexpected error occurred while resetting.", variant: "destructive" });
+      toast({ title: t('adminAppearancePage.toasts.errorTitle', {defaultValue: "Error"}), description: "An unexpected error occurred while resetting.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }

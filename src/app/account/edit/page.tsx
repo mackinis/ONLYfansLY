@@ -16,7 +16,7 @@ import { Loader2, Save, UserCog } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
 import type { UserProfile } from '@/lib/types';
-import { getUserProfileById, updateUserEditableProfile } from '@/lib/actions';
+// Removed: import { getUserProfileById, updateUserEditableProfile } from '@/lib/actions';
 
 const editProfileFormSchema = z.object({
   phone: z.string().min(1, { message: "El teléfono es requerido." }),
@@ -70,7 +70,13 @@ export default function EditAccountPage() {
       const fetchProfile = async () => {
         setIsLoading(true);
         try {
-          const profile = await getUserProfileById(userId);
+          const response = await fetch(`/api/users/${userId}`);
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || t('editAccountPage.toasts.profileErrorDescription'));
+          }
+          const profile: UserProfile = await response.json();
+
           if (profile) {
             form.reset({
               phone: profile.phone || '',
@@ -85,7 +91,8 @@ export default function EditAccountPage() {
             router.push('/account'); 
           }
         } catch (error) {
-          toast({ title: t('editAccountPage.toasts.profileErrorTitle'), description: t('accountPage.toasts.genericError'), variant: 'destructive' });
+          const errorMessage = error instanceof Error ? error.message : t('accountPage.toasts.genericError');
+          toast({ title: t('editAccountPage.toasts.profileErrorTitle'), description: errorMessage, variant: 'destructive' });
         } finally {
           setIsLoading(false);
         }
@@ -98,15 +105,29 @@ export default function EditAccountPage() {
     if (!userId) return;
     setIsSubmitting(true);
     try {
-      const result = await updateUserEditableProfile(userId, data);
-      if (result.success) {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         toast({ title: t('editAccountPage.toasts.updateSuccessTitle'), description: t('editAccountPage.toasts.updateSuccessDescription') });
         router.push('/account'); 
       } else {
         toast({ title: t('editAccountPage.toasts.updateErrorTitle'), description: result.message || t('accountPage.toasts.genericError'), variant: 'destructive' });
+        if (result.errors) {
+          Object.entries(result.errors).forEach(([field, errors]) => {
+             if (Array.isArray(errors) && errors.length > 0) {
+                form.setError(field as keyof EditProfileFormValues, { message: errors[0] as string });
+             }
+          });
+        }
       }
     } catch (error) {
-      toast({ title: t('editAccountPage.toasts.updateErrorTitle'), description: t('accountPage.toasts.genericError'), variant: 'destructive' });
+      const errorMessage = error instanceof Error ? error.message : t('accountPage.toasts.genericError');
+      toast({ title: t('editAccountPage.toasts.updateErrorTitle'), description: errorMessage, variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }

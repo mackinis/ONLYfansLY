@@ -8,7 +8,7 @@ import { Video, MessageSquareText, Users, Palette, Activity, BarChart3, BookOpen
 import { useTranslation } from '@/context/I18nContext';
 import { useEffect, useState } from "react";
 import type { DashboardStats } from "@/lib/types";
-import { getDashboardStats } from "@/lib/actions";
+// Removed: import { getDashboardStats } from "@/lib/actions";
 
 export default function AdminDashboardPage() {
   const { t } = useTranslation();
@@ -19,7 +19,11 @@ export default function AdminDashboardPage() {
     async function fetchStats() {
       setIsLoadingStats(true);
       try {
-        const dashboardStats = await getDashboardStats();
+        const response = await fetch('/api/admin/dashboard-stats');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch dashboard stats: ${response.statusText}`);
+        }
+        const dashboardStats: DashboardStats = await response.json();
         setStats(dashboardStats);
       } catch (error) {
         console.error("Failed to load dashboard stats:", error);

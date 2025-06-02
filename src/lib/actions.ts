@@ -1,12 +1,13 @@
 
-'use server';
+// 'use server'; // Removed: This file will no longer contain server actions directly callable by client.
+// Its functions will be utility functions for API routes or logic moved to API routes.
 
 import { z } from 'zod';
-import type { Testimonial, UserProfile, Video, SiteSettings, SocialLink, Announcement, AnnouncementContentType, HeaderDisplayMode, FooterDisplayMode, ColorSetting, DashboardStats, TestimonialMediaOption, UpdateUserOwnTestimonialData, HeroTaglineSize } from './types';
+import type { Testimonial, UserProfile, Video, SiteSettings, SocialLink, Announcement, AnnouncementContentType, HeaderDisplayMode, FooterDisplayMode, ColorSetting, DashboardStats, TestimonialMediaOption, UpdateUserOwnTestimonialData, HeroTaglineSize, ActiveCurrencySetting, ExchangeRates } from './types';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, Timestamp, orderBy, serverTimestamp, deleteDoc, getDoc, setDoc, runTransaction, increment, count } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, Timestamp, orderBy, serverTimestamp, deleteDoc, getDoc, setDoc, runTransaction, increment,getCountFromServer } from 'firebase/firestore';
 import { sendActivationEmail } from './emailService';
-import { defaultThemeColorsHex } from './config'; 
+import { defaultThemeColorsHex } from './config';
 import { addMinutes, isAfter } from 'date-fns';
 
 
@@ -19,7 +20,7 @@ function generateAlphanumericToken(length: number): string {
   return token;
 }
 
-const testimonialSchema = z.object({
+export const testimonialSubmitSchema = z.object({
   author: z.string().min(2, { message: 'Name must be at least 2 characters.' }).max(50),
   text: z.string().min(10, { message: 'Testimonial must be at least 10 characters.' }).max(500),
   email: z.string().email({ message: 'Please enter a valid email.' }),
@@ -28,8 +29,8 @@ const testimonialSchema = z.object({
   videoUrlsInput: z.string().optional(),
 });
 
-export async function submitTestimonial(formData: z.infer<typeof testimonialSchema>) {
-  const parsedData = testimonialSchema.safeParse(formData);
+export async function submitTestimonialLogic(formData: z.infer<typeof testimonialSubmitSchema>) {
+  const parsedData = testimonialSubmitSchema.safeParse(formData);
 
   if (!parsedData.success) {
     console.error('Invalid testimonial data:', parsedData.error.flatten().fieldErrors);
@@ -37,8 +38,11 @@ export async function submitTestimonial(formData: z.infer<typeof testimonialSche
   }
 
   try {
-    const siteSettings = await getSiteSettings();
+    // Site settings should be fetched by the API route if needed for mediaOptions
+    // For now, assuming API route will pass pre-validated/filtered media URLs
+    const siteSettings = await getSiteSettingsLogic(); // Call the logic function
     const mediaOptions = siteSettings.testimonialMediaOptions || 'both';
+
 
     let photoUrls: string[] = [];
     if ((mediaOptions === 'photos' || mediaOptions === 'both') && parsedData.data.photoUrlsInput) {
@@ -49,7 +53,7 @@ export async function submitTestimonial(formData: z.infer<typeof testimonialSche
     if ((mediaOptions === 'videos' || mediaOptions === 'both') && parsedData.data.videoUrlsInput) {
       videoUrls = parsedData.data.videoUrlsInput.split(',').map(s => s.trim()).filter(s => s && (s.startsWith('http://') || s.startsWith('https://')));
     }
-    
+
     const newTestimonialData = {
       author: parsedData.data.author,
       text: parsedData.data.text,
@@ -57,7 +61,7 @@ export async function submitTestimonial(formData: z.infer<typeof testimonialSche
       userId: parsedData.data.userId,
       photoUrls: photoUrls,
       videoUrls: videoUrls,
-      date: serverTimestamp(), // This will be the submission date
+      date: serverTimestamp(),
       status: 'pending' as Testimonial['status'],
       updatedAt: serverTimestamp(),
     };
@@ -81,7 +85,7 @@ export async function submitTestimonial(formData: z.infer<typeof testimonialSche
   }
 }
 
-export async function getTestimonials(status?: Testimonial['status'], userId?: string): Promise<Testimonial[]> {
+export async function getTestimonialsLogic(status?: Testimonial['status'], userId?: string): Promise<Testimonial[]> {
   try {
     const testimonialsCol = collection(db, 'testimonials');
     let conditions = [];
@@ -104,7 +108,7 @@ export async function getTestimonials(status?: Testimonial['status'], userId?: s
         text: data.text,
         email: data.email,
         userId: data.userId,
-        date: (data.date as Timestamp)?.toDate().toISOString() || new Date().toISOString(), // 'date' is submission date
+        date: (data.date as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
         status: data.status,
         photoUrls: data.photoUrls || [],
         videoUrls: data.videoUrls || [],
@@ -118,10 +122,10 @@ export async function getTestimonials(status?: Testimonial['status'], userId?: s
   }
 }
 
-export async function updateTestimonialStatus(id: string, status: Testimonial['status']): Promise<Testimonial | null> {
+export async function updateTestimonialStatusLogic(id: string, status: Testimonial['status']): Promise<Testimonial | null> {
   try {
     const testimonialRef = doc(db, 'testimonials', id);
-    await updateDoc(testimonialRef, { status, updatedAt: serverTimestamp() }); 
+    await updateDoc(testimonialRef, { status, updatedAt: serverTimestamp() });
     const updatedSnap = await getDoc(testimonialRef);
     if (updatedSnap.exists()) {
         const data = updatedSnap.data();
@@ -146,7 +150,7 @@ export async function updateTestimonialStatus(id: string, status: Testimonial['s
   }
 }
 
-export async function deleteTestimonialById(testimonialId: string) {
+export async function deleteTestimonialByIdLogic(testimonialId: string) {
   try {
     const testimonialRef = doc(db, 'testimonials', testimonialId);
     await deleteDoc(testimonialRef);
@@ -163,7 +167,7 @@ const updateUserOwnTestimonialSchema = z.object({
   videoUrlsInput: z.string().optional(),
 });
 
-export async function updateUserOwnTestimonial(
+export async function updateUserOwnTestimonialLogic(
   testimonialId: string,
   userId: string,
   data: UpdateUserOwnTestimonialData
@@ -191,10 +195,10 @@ export async function updateUserOwnTestimonial(
       return { success: false, message: "This testimonial can no longer be edited as it has already been processed." };
     }
 
-    const siteSettings = await getSiteSettings();
+    const siteSettings = await getSiteSettingsLogic();
     const gracePeriodMinutes = siteSettings.testimonialEditGracePeriodMinutes || 0;
-    const submissionDate = (testimonialData.date as any instanceof Timestamp) 
-        ? (testimonialData.date as any as Timestamp).toDate() 
+    const submissionDate = (testimonialData.date as any instanceof Timestamp)
+        ? (testimonialData.date as any as Timestamp).toDate()
         : new Date(testimonialData.date);
 
     const gracePeriodEndDate = addMinutes(submissionDate, gracePeriodMinutes);
@@ -202,20 +206,20 @@ export async function updateUserOwnTestimonial(
     if (isAfter(new Date(), gracePeriodEndDate)) {
       return { success: false, message: "The editing period for this testimonial has expired." };
     }
-    
+
     const mediaOptions = siteSettings.testimonialMediaOptions || 'both';
     let photoUrls: string[] = testimonialData.photoUrls || [];
     if ((mediaOptions === 'photos' || mediaOptions === 'both') && validation.data.photoUrlsInput !== undefined) {
       photoUrls = validation.data.photoUrlsInput.split(',').map(s => s.trim()).filter(s => s && (s.startsWith('http://') || s.startsWith('https://')));
     } else if (mediaOptions !== 'photos' && mediaOptions !== 'both') {
-      photoUrls = []; // Clear if not allowed
+      photoUrls = [];
     }
 
     let videoUrls: string[] = testimonialData.videoUrls || [];
     if ((mediaOptions === 'videos' || mediaOptions === 'both') && validation.data.videoUrlsInput !== undefined) {
       videoUrls = validation.data.videoUrlsInput.split(',').map(s => s.trim()).filter(s => s && (s.startsWith('http://') || s.startsWith('https://')));
     } else if (mediaOptions !== 'videos' && mediaOptions !== 'both') {
-      videoUrls = []; // Clear if not allowed
+      videoUrls = [];
     }
 
     await updateDoc(testimonialRef, {
@@ -234,7 +238,7 @@ export async function updateUserOwnTestimonial(
 }
 
 
-const registerUserSchema = z.object({
+export const registerUserSchema = z.object({
   name: z.string().min(2, { message: "El nombre debe tener al menos 2 caracteres." }),
   surname: z.string().min(2, { message: "El apellido debe tener al menos 2 caracteres." }),
   email: z.string().email({ message: "Por favor ingresa un email válido." }),
@@ -271,7 +275,7 @@ const adminPasswordChangeSchema = z.object({
 });
 
 
-export async function registerUser(data: z.infer<typeof registerUserSchema>) {
+export async function registerUserLogic(data: z.infer<typeof registerUserSchema>) {
   const validation = registerUserSchema.safeParse(data);
   if (!validation.success) {
     console.error("Registration data invalid:", validation.error.flatten().fieldErrors);
@@ -281,7 +285,7 @@ export async function registerUser(data: z.infer<typeof registerUserSchema>) {
   const { email, password, ...profileData } = validation.data;
 
   try {
-    const siteSettings = await getSiteSettings();
+    const siteSettings = await getSiteSettingsLogic();
     const siteTitle = siteSettings.siteTitle || "Aurum Media";
 
     const usersCol = collection(db, 'users');
@@ -292,8 +296,8 @@ export async function registerUser(data: z.infer<typeof registerUserSchema>) {
     }
 
     const activationToken = generateAlphanumericToken(24);
-    const activationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-    const passwordHash = password; 
+    const activationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const passwordHash = password;
     const isAdminEmail = email === process.env.ADMIN_EMAIL;
     const userRole = isAdminEmail ? 'admin' : 'user';
 
@@ -345,7 +349,7 @@ export async function registerUser(data: z.infer<typeof registerUserSchema>) {
   }
 }
 
-export async function getUserByEmailForLogin(email: string): Promise<UserProfile | null> {
+export async function getUserByEmailForLoginLogic(email: string): Promise<UserProfile | null> {
   if (!email) return null;
   try {
     const usersCol = collection(db, 'users');
@@ -371,7 +375,7 @@ export async function getUserByEmailForLogin(email: string): Promise<UserProfile
   }
 }
 
-export async function verifyUserActivationToken(userId: string, token: string) {
+export async function verifyUserActivationTokenLogic(userId: string, token: string) {
   try {
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
@@ -410,12 +414,12 @@ export async function verifyUserActivationToken(userId: string, token: string) {
   }
 }
 
-export async function resendActivationToken(email: string) {
+export async function resendActivationTokenLogic(email: string) {
   try {
-    const siteSettings = await getSiteSettings();
+    const siteSettings = await getSiteSettingsLogic();
     const siteTitle = siteSettings.siteTitle || "Aurum Media";
 
-    const user = await getUserByEmailForLogin(email);
+    const user = await getUserByEmailForLoginLogic(email);
     if (!user) {
       return { success: false, message: 'Usuario no encontrado con este correo electrónico.' };
     }
@@ -453,7 +457,7 @@ export async function resendActivationToken(email: string) {
   }
 }
 
-export async function getAllUsers(): Promise<UserProfile[]> {
+export async function getAllUsersLogic(): Promise<UserProfile[]> {
   try {
     const usersCol = collection(db, 'users');
     const usersQuery = query(usersCol, orderBy('createdAt', 'desc'));
@@ -465,6 +469,8 @@ export async function getAllUsers(): Promise<UserProfile[]> {
     }
 
     const testimonialsCol = collection(db, 'testimonials');
+    // Fetch all testimonials to count them client-side (can be optimized for very large dbs)
+    // or maintain a count on the user document via triggers if performance becomes an issue.
     const testimonialsSnapshot = await getDocs(testimonialsCol);
     const testimonialCounts: Record<string, number> = {};
 
@@ -474,6 +480,7 @@ export async function getAllUsers(): Promise<UserProfile[]> {
             testimonialCounts[data.userId] = (testimonialCounts[data.userId] || 0) + 1;
         }
     });
+
 
     usersSnapshot.forEach((docSnap) => {
       const data = docSnap.data();
@@ -494,13 +501,12 @@ export async function getAllUsers(): Promise<UserProfile[]> {
   }
 }
 
-export async function getUserProfileById(userId: string): Promise<UserProfile | null> {
+export async function getUserProfileByIdLogic(userId: string): Promise<UserProfile | null> {
   if (!userId) return null;
   try {
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
     if (!userSnap.exists()) {
-      console.warn(`User not found with ID: ${userId}`);
       return null;
     }
     const userData = userSnap.data();
@@ -509,6 +515,7 @@ export async function getUserProfileById(userId: string): Promise<UserProfile | 
     const q = query(testimonialsCol, where('userId', '==', userId));
     const testimonialsSnapshot = await getDocs(q);
     const testimonialCount = testimonialsSnapshot.size;
+
 
     return {
       id: userSnap.id,
@@ -520,12 +527,12 @@ export async function getUserProfileById(userId: string): Promise<UserProfile | 
       testimonialCount: testimonialCount,
     } as UserProfile;
   } catch (error) {
-    console.error(`Error fetching user profile by ID ${userId}:`, error);
-    return null;
+    console.error(`Error fetching user profile by ID ${userId} in getUserProfileByIdLogic:`, error);
+    throw new Error(`Failed to fetch user profile for ${userId}. Original error: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-const userEditableProfileSchema = z.object({
+export const userEditableProfileSchema = z.object({
   phone: z.string().min(1, "El teléfono es requerido.").optional().or(z.literal('')),
   address: z.string().min(1, "La dirección es requerida.").optional().or(z.literal('')),
   postalCode: z.string().min(1, "El código postal es requerido.").optional().or(z.literal('')),
@@ -534,7 +541,7 @@ const userEditableProfileSchema = z.object({
   country: z.string().min(1, "El país es requerido.").optional().or(z.literal('')),
 });
 
-export async function updateUserEditableProfile(userId: string, data: z.infer<typeof userEditableProfileSchema>) {
+export async function updateUserEditableProfileLogic(userId: string, data: z.infer<typeof userEditableProfileSchema>) {
   const validation = userEditableProfileSchema.safeParse(data);
   if (!validation.success) {
     const errors = validation.error.flatten().fieldErrors;
@@ -556,7 +563,7 @@ export async function updateUserEditableProfile(userId: string, data: z.infer<ty
 }
 
 
-export async function updateUserActiveStatus(userId: string, isActive: boolean) {
+export async function updateUserActiveStatusLogic(userId: string, isActive: boolean) {
   try {
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
@@ -570,7 +577,7 @@ export async function updateUserActiveStatus(userId: string, isActive: boolean) 
   }
 }
 
-export async function updateUserTestimonialPermission(userId: string, canSubmit: boolean) {
+export async function updateUserTestimonialPermissionLogic(userId: string, canSubmit: boolean) {
   try {
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
@@ -584,7 +591,7 @@ export async function updateUserTestimonialPermission(userId: string, canSubmit:
   }
 }
 
-export async function getAdminProfile(): Promise<UserProfile | null> {
+export async function getAdminProfileLogic(): Promise<UserProfile | null> {
   const adminEmail = process.env.ADMIN_EMAIL;
   if (!adminEmail) {
     console.error("ADMIN_EMAIL environment variable is not set.");
@@ -615,7 +622,7 @@ export async function getAdminProfile(): Promise<UserProfile | null> {
   }
 }
 
-export async function updateAdminProfile(adminId: string, data: z.infer<typeof adminProfileUpdateSchema>) {
+export async function updateAdminProfileLogic(adminId: string, data: z.infer<typeof adminProfileUpdateSchema>) {
   const validation = adminProfileUpdateSchema.safeParse(data);
   if (!validation.success) {
     return { success: false, message: "Invalid admin profile data.", errors: validation.error.flatten().fieldErrors };
@@ -633,7 +640,7 @@ export async function updateAdminProfile(adminId: string, data: z.infer<typeof a
   }
 }
 
-export async function updateAdminPassword(adminId: string, data: z.infer<typeof adminPasswordChangeSchema>) {
+export async function updateAdminPasswordLogic(adminId: string, data: z.infer<typeof adminPasswordChangeSchema>) {
   const validation = adminPasswordChangeSchema.safeParse(data);
   if (!validation.success) {
     return { success: false, message: "Invalid password data.", errors: validation.error.flatten().fieldErrors };
@@ -652,7 +659,7 @@ export async function updateAdminPassword(adminId: string, data: z.infer<typeof 
   }
 }
 
-export async function deleteUserById(userId: string) {
+export async function deleteUserByIdLogic(userId: string) {
     try {
         const userRef = doc(db, 'users', userId);
         await deleteDoc(userRef);
@@ -663,13 +670,13 @@ export async function deleteUserById(userId: string) {
     }
 }
 
-const videoCourseSchema = z.object({
+export const videoCourseSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   previewImageUrl: z.string().url("Preview Image URL must be a valid URL").optional().or(z.literal('')),
   videoUrl: z.string().url("Video URL must be a valid URL"),
   priceArs: z.coerce.number().positive("Price must be a positive number"),
-  discountInput: z.string().optional().or(z.literal('')), 
+  discountInput: z.string().optional().or(z.literal('')),
   duration: z.string().optional(),
 });
 
@@ -687,14 +694,13 @@ function calculateCoursePrices(
 
   if (discountInputValue && typeof discountInputValue === 'string' && discountInputValue.trim() !== '') {
     const trimmedDiscount = discountInputValue.trim();
-    processedDiscountValueForStorage = trimmedDiscount; // Store the raw input initially
+    processedDiscountValueForStorage = trimmedDiscount;
 
     if (trimmedDiscount.endsWith('%')) {
       const percentage = parseFloat(trimmedDiscount.slice(0, -1));
       if (!isNaN(percentage) && percentage >= 0 && percentage <= 100) {
         finalPrice = originalPrice * (1 - percentage / 100);
       } else {
-        // Invalid percentage, reset discount
         processedDiscountValueForStorage = null;
       }
     } else {
@@ -702,11 +708,8 @@ function calculateCoursePrices(
       if (!isNaN(fixedFinalPrice) && fixedFinalPrice >= 0 && fixedFinalPrice < originalPrice) {
         finalPrice = fixedFinalPrice;
       } else {
-         // Invalid fixed price or not a discount, reset discount for calculation purposes
-         // but keep user's input if they just entered a number not intended as discount
-         // If the fixed price is not less than original, it's not a discount.
          if (!(fixedFinalPrice < originalPrice)) {
-            processedDiscountValueForStorage = null; // This was not a valid discount.
+            processedDiscountValueForStorage = null;
          }
       }
     }
@@ -714,14 +717,14 @@ function calculateCoursePrices(
   return { finalPrice: Math.round(finalPrice * 100) / 100, processedDiscountValueForStorage };
 }
 
-export async function createVideoCourse(data: z.input<typeof videoCourseSchema>) {
+export async function createVideoCourseLogic(data: z.input<typeof videoCourseSchema>) {
   const validation = videoCourseSchema.safeParse(data);
   if (!validation.success) {
     return { success: false, message: "Invalid course data.", errors: validation.error.flatten().fieldErrors };
   }
   try {
     const { priceArs, discountInput, ...restOfData } = validation.data;
-    
+
     const { finalPrice, processedDiscountValueForStorage } = calculateCoursePrices(priceArs, discountInput);
 
     const coursesCol = collection(db, 'videoCourses');
@@ -738,9 +741,9 @@ export async function createVideoCourse(data: z.input<typeof videoCourseSchema>)
 
     const docRef = await addDoc(coursesCol, {
       ...restOfData,
-      priceArs: priceArs, 
-      discountInput: processedDiscountValueForStorage, 
-      finalPriceArs: finalPrice, 
+      priceArs: priceArs,
+      discountInput: processedDiscountValueForStorage,
+      finalPriceArs: finalPrice,
       order: newOrder,
       views: 0,
       createdAt: serverTimestamp(),
@@ -753,7 +756,7 @@ export async function createVideoCourse(data: z.input<typeof videoCourseSchema>)
   }
 }
 
-export async function getVideoCourses(): Promise<Video[]> {
+export async function getVideoCoursesLogic(): Promise<Video[]> {
   try {
     const coursesCol = collection(db, 'videoCourses');
     const q = query(coursesCol, orderBy('order', 'asc'));
@@ -784,7 +787,7 @@ export async function getVideoCourses(): Promise<Video[]> {
   }
 }
 
-export async function updateVideoCourse(id: string, data: Partial<z.input<typeof videoCourseSchema>>) {
+export async function updateVideoCourseLogic(id: string, data: Partial<z.input<typeof videoCourseSchema>>) {
   const partialSchema = videoCourseSchema.partial();
   const validation = partialSchema.safeParse(data);
 
@@ -810,11 +813,11 @@ export async function updateVideoCourse(id: string, data: Partial<z.input<typeof
 
     if (data.priceArs !== undefined || data.discountInput !== undefined) {
       const { finalPrice, processedDiscountValueForStorage } = calculateCoursePrices(newPriceArs, newDiscountInput);
-      updatedPayload.priceArs = newPriceArs; 
+      updatedPayload.priceArs = newPriceArs;
       updatedPayload.discountInput = processedDiscountValueForStorage;
       updatedPayload.finalPriceArs = finalPrice;
     }
-    
+
     updatedPayload.updatedAt = serverTimestamp();
 
     await updateDoc(courseRef, updatedPayload);
@@ -825,7 +828,7 @@ export async function updateVideoCourse(id: string, data: Partial<z.input<typeof
   }
 }
 
-export async function deleteVideoCourse(id: string) {
+export async function deleteVideoCourseLogic(id: string) {
   try {
     const courseRef = doc(db, 'videoCourses', id);
     await deleteDoc(courseRef);
@@ -836,7 +839,7 @@ export async function deleteVideoCourse(id: string) {
   }
 }
 
-export async function updateVideoCoursesOrder(courses: Array<{ id: string; order: number }>) {
+export async function updateVideoCoursesOrderLogic(courses: Array<{ id: string; order: number }>) {
   try {
     const batch = [];
     for (const course of courses) {
@@ -851,7 +854,7 @@ export async function updateVideoCoursesOrder(courses: Array<{ id: string; order
   }
 }
 
-export async function incrementVideoCourseViews(videoId: string): Promise<{ success: boolean; message?: string }> {
+export async function incrementVideoCourseViewsLogic(videoId: string): Promise<{ success: boolean; message?: string }> {
   if (!videoId) {
     return { success: false, message: 'Video ID is required.' };
   }
@@ -869,7 +872,7 @@ export async function incrementVideoCourseViews(videoId: string): Promise<{ succ
 }
 
 
-export async function getVideoCourseById(id: string): Promise<Video | null> {
+export async function getVideoCourseByIdLogic(id: string): Promise<Video | null> {
   try {
     const courseRef = doc(db, 'videoCourses', id);
     const docSnap = await getDoc(courseRef);
@@ -920,7 +923,7 @@ const colorSettingSchemaDb = z.object({
 const validTestimonialMediaOptions = ['none', 'photos', 'videos', 'both'] as const;
 const validHeroTaglineSizes = ['sm', 'md', 'lg'] as const;
 
-const siteSettingsInternalSchema = z.object({
+export const siteSettingsInternalSchema = z.object({
   siteTitle: z.string().default("Aurum Media"),
   siteIconUrl: z.string().url().optional().or(z.literal('')).default(""),
   headerIconUrl: z.string().url().optional().or(z.literal('')).default(""),
@@ -951,6 +954,8 @@ const siteSettingsInternalSchema = z.object({
   heroTaglineSize: z.enum(validHeroTaglineSizes).optional().default('md'),
   liveStreamDefaultTitle: z.string().default("Evento en Vivo"),
   liveStreamOfflineMessage: z.string().default("La transmisión en vivo está actualmente desconectada. ¡Vuelve pronto!"),
+  liveStreamAuthorizedUserId: z.string().nullable().optional().default(null),
+  liveStreamForLoggedInUsersOnly: z.boolean().optional().default(false),
   socialLinks: z.array(socialLinkSchemaDb).default([]),
   testimonialMediaOptions: z.enum(validTestimonialMediaOptions).default('both'),
   testimonialEditGracePeriodMinutes: z.coerce.number().int().min(0).default(60),
@@ -971,9 +976,17 @@ const siteSettingsInternalSchema = z.object({
   headerDisplayMode: z.enum(['logo', 'title', 'both']).default('both'),
   footerDisplayMode: z.enum(['logo', 'title', 'both']).default('logo'),
   footerLogoSize: z.number().int().positive().optional().default(64),
+  mobileAppsSectionTitle: z.string().optional().default("Nuestras Apps"),
+  showMobileAppsSection: z.boolean().optional().default(false),
+  showAndroidApp: z.boolean().optional().default(false),
+  androidAppLink: z.string().url().optional().or(z.literal('')).default(""),
+  androidAppIconUrl: z.string().url({ message: "Android app icon URL must be valid." }).optional().or(z.literal("")).default(""),
+  showIosApp: z.boolean().optional().default(false),
+  iosAppLink: z.string().url().optional().or(z.literal('')).default(""),
+  iosAppIconUrl: z.string().url({ message: "iOS app icon URL must be valid." }).optional().or(z.literal("")).default(""),
 });
 
-const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
+export const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
   siteTitle: "Aurum Media",
   siteIconUrl: "",
   headerIconUrl: "",
@@ -987,14 +1000,16 @@ const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
   ],
   allowUserToChooseCurrency: true,
   exchangeRates: { usdToArs: 1000, eurToArs: 1100 },
-  themeColors: defaultThemeColorsHex.map(c => ({...c})), 
+  themeColors: defaultThemeColorsHex.map(c => ({...c})),
   heroTitle: "Descubre Aurum Media",
   heroSubtitle: "Sumérgete en una colección curada de contenido de video premium, diseñado para inspirar y cautivar.",
   heroTagline: "",
-  heroTaglineColor: "#FFFFFF", // Default white for dark theme
+  heroTaglineColor: "#FFFFFF",
   heroTaglineSize: "md",
   liveStreamDefaultTitle: "Evento en Vivo",
   liveStreamOfflineMessage: "La transmisión en vivo está actualmente desconectada. ¡Vuelve pronto!",
+  liveStreamAuthorizedUserId: null,
+  liveStreamForLoggedInUsersOnly: false,
   socialLinks: [
     { id: `social-${Date.now()}-fb`, name: 'Facebook', url: '', iconName: 'Facebook' },
     { id: `social-${Date.now()}-ig`, name: 'Instagram', url: '', iconName: 'Instagram' },
@@ -1013,10 +1028,18 @@ const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema> = {
   headerDisplayMode: 'both',
   footerDisplayMode: 'logo',
   footerLogoSize: 64,
+  mobileAppsSectionTitle: "Nuestras Apps",
+  showMobileAppsSection: false,
+  showAndroidApp: false,
+  androidAppLink: "",
+  androidAppIconUrl: "",
+  showIosApp: false,
+  iosAppLink: "",
+  iosAppIconUrl: "",
 };
 
 
-export async function getSiteSettings(): Promise<SiteSettings> {
+export async function getSiteSettingsLogic(): Promise<SiteSettings> {
   try {
     const settingsRef = doc(db, 'siteSettings', siteSettingsDocId);
     const docSnap = await getDoc(settingsRef);
@@ -1027,11 +1050,10 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     if (docSnap.exists()) {
       currentData = { ...defaultSiteSettingsInput, ...docSnap.data() };
     } else {
-      needsUpdateInDb = true; 
+      needsUpdateInDb = true;
     }
 
-    // Ensure themeColors are correctly initialized/merged
-    let finalThemeColors = [...defaultThemeColorsHex.map(c => ({...c, value: c.defaultValueHex }))]; 
+    let finalThemeColors = [...defaultThemeColorsHex.map(c => ({...c, value: c.defaultValueHex }))];
     if (currentData.themeColors && Array.isArray(currentData.themeColors) && currentData.themeColors.length > 0) {
       const existingColorsMap = new Map(currentData.themeColors.map(c => [c.id, c]));
       finalThemeColors = defaultThemeColorsHex.map(defaultColor => {
@@ -1053,11 +1075,10 @@ export async function getSiteSettings(): Promise<SiteSettings> {
           }
       }
     } else {
-      needsUpdateInDb = true; 
+      needsUpdateInDb = true;
     }
     currentData.themeColors = finalThemeColors;
 
-    // Ensure socialLinks have IDs
     if (!Array.isArray(currentData.socialLinks)) {
         currentData.socialLinks = defaultSiteSettingsInput.socialLinks || [];
         needsUpdateInDb = true;
@@ -1069,32 +1090,27 @@ export async function getSiteSettings(): Promise<SiteSettings> {
             ...link,
         }
     });
-    
-    // Ensure footerLogoSize has a default if missing
+
     if (currentData.footerLogoSize === undefined || typeof currentData.footerLogoSize !== 'number' || currentData.footerLogoSize <= 0) {
         currentData.footerLogoSize = defaultSiteSettingsInput.footerLogoSize;
         needsUpdateInDb = true;
     }
-    
-    // Ensure headerIconUrl has a default if missing
+
     if (currentData.headerIconUrl === undefined) {
         currentData.headerIconUrl = defaultSiteSettingsInput.headerIconUrl;
         needsUpdateInDb = true;
     }
 
-    // Ensure testimonialMediaOptions has a default if missing or invalid
     if (currentData.testimonialMediaOptions === undefined || !validTestimonialMediaOptions.includes(currentData.testimonialMediaOptions as any)) {
         currentData.testimonialMediaOptions = defaultSiteSettingsInput.testimonialMediaOptions;
         needsUpdateInDb = true;
     }
-    
-    // Ensure testimonialEditGracePeriodMinutes has a default if missing or invalid
+
     if (currentData.testimonialEditGracePeriodMinutes === undefined || typeof currentData.testimonialEditGracePeriodMinutes !== 'number' || currentData.testimonialEditGracePeriodMinutes < 0) {
       currentData.testimonialEditGracePeriodMinutes = defaultSiteSettingsInput.testimonialEditGracePeriodMinutes;
       needsUpdateInDb = true;
     }
 
-    // Ensure hero tagline fields have defaults if missing
     if (currentData.heroTagline === undefined) {
       currentData.heroTagline = defaultSiteSettingsInput.heroTagline;
       needsUpdateInDb = true;
@@ -1107,14 +1123,45 @@ export async function getSiteSettings(): Promise<SiteSettings> {
       currentData.heroTaglineSize = defaultSiteSettingsInput.heroTaglineSize;
       needsUpdateInDb = true;
     }
+    if (currentData.mobileAppsSectionTitle === undefined) currentData.mobileAppsSectionTitle = defaultSiteSettingsInput.mobileAppsSectionTitle;
+    if (currentData.showMobileAppsSection === undefined) currentData.showMobileAppsSection = defaultSiteSettingsInput.showMobileAppsSection;
+    if (currentData.showAndroidApp === undefined) currentData.showAndroidApp = defaultSiteSettingsInput.showAndroidApp;
+    if (currentData.androidAppLink === undefined) currentData.androidAppLink = defaultSiteSettingsInput.androidAppLink;
+    if (currentData.androidAppIconUrl === undefined) currentData.androidAppIconUrl = defaultSiteSettingsInput.androidAppIconUrl;
+    if (currentData.showIosApp === undefined) currentData.showIosApp = defaultSiteSettingsInput.showIosApp;
+    if (currentData.iosAppLink === undefined) currentData.iosAppLink = defaultSiteSettingsInput.iosAppLink;
+    if (currentData.iosAppIconUrl === undefined) currentData.iosAppIconUrl = defaultSiteSettingsInput.iosAppIconUrl;
 
+    if (currentData.liveStreamAuthorizedUserId === undefined) {
+      currentData.liveStreamAuthorizedUserId = defaultSiteSettingsInput.liveStreamAuthorizedUserId;
+      needsUpdateInDb = true;
+    }
+    if (currentData.liveStreamForLoggedInUsersOnly === undefined) {
+      currentData.liveStreamForLoggedInUsersOnly = defaultSiteSettingsInput.liveStreamForLoggedInUsersOnly;
+      needsUpdateInDb = true;
+    }
+
+
+    // Ensure all activeCurrencies have an 'id'
+    if (Array.isArray(currentData.activeCurrencies)) {
+      currentData.activeCurrencies = currentData.activeCurrencies.map((currency, index) => {
+        if (!currency.id) needsUpdateInDb = true;
+        return {
+          ...currency,
+          id: currency.id || `currency-id-${index}` // Provide a fallback ID
+        };
+      });
+    } else {
+      currentData.activeCurrencies = defaultSiteSettingsInput.activeCurrencies || [];
+      needsUpdateInDb = true;
+    }
 
     if (needsUpdateInDb) {
         const dataToSet = { ...siteSettingsInternalSchema.parse(currentData), updatedAt: serverTimestamp() };
         await setDoc(settingsRef, dataToSet);
         console.log("Site settings initialized or updated with defaults in Firestore.");
     }
-    
+
     const parsedData = siteSettingsInternalSchema.parse(currentData);
     return {
       ...parsedData,
@@ -1122,21 +1169,77 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     };
 
   } catch (error) {
-    console.error('Error fetching or creating site settings:', error);
-    const fallbackSettings = siteSettingsInternalSchema.parse(defaultSiteSettingsInput);
-    fallbackSettings.themeColors = defaultThemeColorsHex.map(c=>({...c}));
-    fallbackSettings.socialLinks = (fallbackSettings.socialLinks || []).map((link, index) => ({
-        id: link.id || `social-fallback-${Date.now()}-${index}`,
-        ...link,
-    }));
-    return {
-        ...fallbackSettings,
-        updatedAt: new Date().toISOString(),
-    };
+    console.error('Error fetching or creating site settings in getSiteSettingsLogic:', error);
+    // More robust fallback construction
+    try {
+        const parsedFallback = siteSettingsInternalSchema.parse(defaultSiteSettingsInput);
+        return {
+            ...parsedFallback,
+            siteTitle: parsedFallback.siteTitle || "Aurum Media (Fallback)",
+            themeColors: parsedFallback.themeColors && parsedFallback.themeColors.length > 0 
+                         ? parsedFallback.themeColors 
+                         : defaultThemeColorsHex.map(c=>({...c, value: c.defaultValueHex })),
+            socialLinks: (parsedFallback.socialLinks || []).map((link, index) => ({
+                id: link.id || `social-fallback-${Date.now()}-${index}`,
+                ...link,
+            })),
+            activeCurrencies: parsedFallback.activeCurrencies && parsedFallback.activeCurrencies.length > 0 
+                              ? parsedFallback.activeCurrencies.map((c, idx) => ({...c, id: c.id || `curr-fallback-${Date.now()}-${idx}`}))
+                              : [{ id: "ars", code: "ARS", name: "Argentine Peso", symbol: "AR$", isPrimary: true }],
+            updatedAt: new Date().toISOString(),
+        };
+    } catch (parseError) {
+        console.error("CRITICAL: Failed to parse defaultSiteSettingsInput in fallback logic of getSiteSettingsLogic:", parseError);
+        // Return an absolutely minimal, guaranteed serializable object if parsing defaults also fails
+        return {
+            siteTitle: "Aurum Media (Critical Fallback)",
+            maintenanceMode: true,
+            defaultLanguage: 'es',
+            allowUserToChooseLanguage: false,
+            allowUserToChooseCurrency: false,
+            activeCurrencies: [{ id: "ars", code: "ARS", name: "Argentine Peso", symbol: "AR$", isPrimary: true }],
+            exchangeRates: { usdToArs: 1000, eurToArs: 1100 },
+            themeColors: defaultThemeColorsHex.map(c => ({ ...c, value: c.defaultValueHex })),
+            heroTitle: "Site Currently Unavailable",
+            heroSubtitle: "Please check back later.",
+            liveStreamDefaultTitle: "Live Stream Offline",
+            liveStreamOfflineMessage: "The live stream is currently offline.",
+            liveStreamAuthorizedUserId: null,
+            liveStreamForLoggedInUsersOnly: false,
+            socialLinks: [],
+            testimonialMediaOptions: 'none',
+            testimonialEditGracePeriodMinutes: 0,
+            updatedAt: new Date().toISOString(),
+            whatsAppEnabled: false,
+            whatsAppPhoneNumber: '',
+            whatsAppButtonSize: 56,
+            whatsAppIconSize: 28,
+            whatsAppIcon: 'default',
+            whatsAppCustomIconUrl: '',
+            aiCurationEnabled: false,
+            aiCurationMinTestimonials: 9999, // Effectively disable
+            headerDisplayMode: 'title',
+            footerDisplayMode: 'title',
+            footerLogoSize: 32,
+            heroTagline: '',
+            heroTaglineColor: '#FFFFFF',
+            heroTaglineSize: 'md',
+            mobileAppsSectionTitle: "Our Apps",
+            showMobileAppsSection: false,
+            showAndroidApp: false,
+            androidAppLink: "",
+            androidAppIconUrl: "",
+            showIosApp: false,
+            iosAppLink: "",
+            iosAppIconUrl: "",
+            siteIconUrl: "",
+            headerIconUrl: ""
+        };
+    }
   }
 }
 
-export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updatedAt' | 'socialLinks' | 'themeColors'> & { socialLinks?: SocialLink[], themeColors?: ColorSetting[] }>) {
+export async function updateSiteSettingsLogic(data: Partial<Omit<SiteSettings, 'updatedAt' | 'socialLinks' | 'themeColors'> & { socialLinks?: SocialLink[], themeColors?: ColorSetting[], activeCurrencies?: ActiveCurrencySetting[], exchangeRates?: ExchangeRates }>) {
   if (Object.keys(data).length === 0) {
     return { success: false, message: "No settings data provided for update." };
   }
@@ -1144,6 +1247,16 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
   try {
     const settingsRef = doc(db, 'siteSettings', siteSettingsDocId);
     const updateData: Record<string, any> = { ...data };
+
+    if (data.liveStreamForLoggedInUsersOnly === true && data.liveStreamAuthorizedUserId !== null) {
+      // If "logged in users only" is being turned ON, and a specific user was authorized,
+      // we should clear the specific user authorization.
+      updateData.liveStreamAuthorizedUserId = null;
+    } else if (data.liveStreamAuthorizedUserId !== undefined && data.liveStreamAuthorizedUserId !== null) {
+      // If a specific user is being authorized, ensure "logged in users only" is turned OFF.
+      updateData.liveStreamForLoggedInUsersOnly = false;
+    }
+
 
     if (data.exchangeRates) {
         updateData.exchangeRates = {
@@ -1168,11 +1281,24 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
     if (data.heroTaglineColor && !/^#[0-9A-Fa-f]{6}$/.test(data.heroTaglineColor)) {
         updateData.heroTaglineColor = defaultSiteSettingsInput.heroTaglineColor;
     }
-
-
-    if (data.activeCurrencies && !Array.isArray(data.activeCurrencies)) {
-        delete updateData.activeCurrencies;
+    if (data.liveStreamAuthorizedUserId !== undefined) {
+        updateData.liveStreamAuthorizedUserId = data.liveStreamAuthorizedUserId;
     }
+    if (data.liveStreamForLoggedInUsersOnly !== undefined) {
+      updateData.liveStreamForLoggedInUsersOnly = data.liveStreamForLoggedInUsersOnly;
+    }
+
+
+    if (data.activeCurrencies && Array.isArray(data.activeCurrencies)) {
+      updateData.activeCurrencies = data.activeCurrencies.map((currency, index) => ({
+        ...currency,
+        id: currency.id || `currency-id-${Date.now()}-${index}`, // Ensure ID
+      }));
+    } else if (data.hasOwnProperty('activeCurrencies') && !Array.isArray(data.activeCurrencies)) {
+        delete updateData.activeCurrencies; // Remove if invalid format
+    }
+
+
     if (data.socialLinks && Array.isArray(data.socialLinks)) {
       updateData.socialLinks = data.socialLinks.map((link, index) => ({
         id: link.id || `new-social-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${index}`,
@@ -1187,33 +1313,48 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
           labelKey: tc.labelKey,
           cssVar: tc.cssVar,
           defaultValueHex: tc.defaultValueHex,
-          value: /^#[0-9A-Fa-f]{6}$/.test(tc.value) ? tc.value : tc.defaultValueHex, 
+          value: /^#[0-9A-Fa-f]{6}$/.test(tc.value) ? tc.value : tc.defaultValueHex,
       }));
     }
-    
+
     if (data.testimonialMediaOptions && validTestimonialMediaOptions.includes(data.testimonialMediaOptions as any)) {
         updateData.testimonialMediaOptions = data.testimonialMediaOptions;
-    } else if (data.hasOwnProperty('testimonialMediaOptions')) { 
+    } else if (data.hasOwnProperty('testimonialMediaOptions')) {
         updateData.testimonialMediaOptions = defaultSiteSettingsInput.testimonialMediaOptions;
     }
-    
+
     if (data.heroTaglineSize && validHeroTaglineSizes.includes(data.heroTaglineSize as any)) {
         updateData.heroTaglineSize = data.heroTaglineSize;
     } else if (data.hasOwnProperty('heroTaglineSize')) {
         updateData.heroTaglineSize = defaultSiteSettingsInput.heroTaglineSize;
     }
+    if (data.showMobileAppsSection !== undefined) updateData.showMobileAppsSection = Boolean(data.showMobileAppsSection);
+    if (data.showAndroidApp !== undefined) updateData.showAndroidApp = Boolean(data.showAndroidApp);
+    if (data.showIosApp !== undefined) updateData.showIosApp = Boolean(data.showIosApp);
 
+    if (data.androidAppLink !== undefined) {
+        updateData.androidAppLink = data.androidAppLink && z.string().url().safeParse(data.androidAppLink).success ? data.androidAppLink : "";
+    }
+     if (data.androidAppIconUrl !== undefined) {
+        updateData.androidAppIconUrl = data.androidAppIconUrl && z.string().url().safeParse(data.androidAppIconUrl).success ? data.androidAppIconUrl : "";
+    }
+    if (data.iosAppLink !== undefined) {
+        updateData.iosAppLink = data.iosAppLink && z.string().url().safeParse(data.iosAppLink).success ? data.iosAppLink : "";
+    }
+    if (data.iosAppIconUrl !== undefined) {
+        updateData.iosAppIconUrl = data.iosAppIconUrl && z.string().url().safeParse(data.iosAppIconUrl).success ? data.iosAppIconUrl : "";
+    }
 
     updateData.updatedAt = serverTimestamp();
 
     await setDoc(settingsRef, updateData, { merge: true });
 
     const updatedSettingsSnap = await getDoc(settingsRef);
-    let fullUpdatedSettings: SiteSettings = { 
-      ...defaultSiteSettingsInput, 
-      themeColors: defaultThemeColorsHex.map(c=>({...c})), 
-      ...updateData, 
-      updatedAt: new Date().toISOString() 
+    let fullUpdatedSettings: SiteSettings = {
+      ...defaultSiteSettingsInput,
+      themeColors: defaultThemeColorsHex.map(c=>({...c})),
+      ...updateData,
+      updatedAt: new Date().toISOString()
     };
 
     if (updatedSettingsSnap.exists()) {
@@ -1239,7 +1380,7 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
                  };
              });
         }
-        
+
         if (mergedData.footerLogoSize === undefined || typeof mergedData.footerLogoSize !== 'number' || mergedData.footerLogoSize <= 0) {
             mergedData.footerLogoSize = defaultSiteSettingsInput.footerLogoSize;
         }
@@ -1261,6 +1402,28 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
         if (mergedData.heroTaglineSize === undefined || !validHeroTaglineSizes.includes(mergedData.heroTaglineSize as any)) {
           mergedData.heroTaglineSize = defaultSiteSettingsInput.heroTaglineSize;
         }
+        if (mergedData.mobileAppsSectionTitle === undefined) mergedData.mobileAppsSectionTitle = defaultSiteSettingsInput.mobileAppsSectionTitle;
+        if (mergedData.showMobileAppsSection === undefined) mergedData.showMobileAppsSection = defaultSiteSettingsInput.showMobileAppsSection;
+        if (mergedData.showAndroidApp === undefined) mergedData.showAndroidApp = defaultSiteSettingsInput.showAndroidApp;
+        if (mergedData.androidAppLink === undefined) mergedData.androidAppLink = defaultSiteSettingsInput.androidAppLink;
+        if (mergedData.androidAppIconUrl === undefined) mergedData.androidAppIconUrl = defaultSiteSettingsInput.androidAppIconUrl;
+        if (mergedData.showIosApp === undefined) mergedData.showIosApp = defaultSiteSettingsInput.showIosApp;
+        if (mergedData.iosAppLink === undefined) mergedData.iosAppLink = defaultSiteSettingsInput.iosAppLink;
+        if (mergedData.iosAppIconUrl === undefined) mergedData.iosAppIconUrl = defaultSiteSettingsInput.iosAppIconUrl;
+        if (mergedData.liveStreamAuthorizedUserId === undefined) mergedData.liveStreamAuthorizedUserId = defaultSiteSettingsInput.liveStreamAuthorizedUserId;
+        if (mergedData.liveStreamForLoggedInUsersOnly === undefined) mergedData.liveStreamForLoggedInUsersOnly = defaultSiteSettingsInput.liveStreamForLoggedInUsersOnly;
+
+
+        // Ensure activeCurrencies from DB merge correctly
+        if (Array.isArray(mergedData.activeCurrencies)) {
+          mergedData.activeCurrencies = mergedData.activeCurrencies.map((currency, index) => ({
+            ...currency,
+            id: currency.id || `db-currency-id-${Date.now()}-${index}`,
+          }));
+        } else {
+          mergedData.activeCurrencies = defaultSiteSettingsInput.activeCurrencies || [];
+        }
+
 
         const parsedData = siteSettingsInternalSchema.parse(mergedData);
         fullUpdatedSettings = {
@@ -1280,7 +1443,7 @@ export async function updateSiteSettings(data: Partial<Omit<SiteSettings, 'updat
 }
 
 
-const announcementSchemaBase = z.object({
+export const announcementSchemaBase = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
   contentType: z.enum(['image-only', 'text-image', 'text-video', 'video-only']),
   text: z.string().optional(),
@@ -1294,7 +1457,7 @@ const announcementSchemaBase = z.object({
   showOnce: z.boolean().default(false).optional(),
 });
 
-const announcementSchema = announcementSchemaBase.superRefine((data, ctx) => {
+export const announcementSchema = announcementSchemaBase.superRefine((data, ctx) => {
   if (data.contentType === 'image-only' && !data.imageUrl) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Image URL is required for 'Image only' type.", path: ['imageUrl'] });
   }
@@ -1312,7 +1475,7 @@ const announcementSchema = announcementSchemaBase.superRefine((data, ctx) => {
 });
 
 
-export async function createAnnouncement(data: z.infer<typeof announcementSchema>) {
+export async function createAnnouncementLogic(data: z.infer<typeof announcementSchema>) {
   const validation = announcementSchema.safeParse(data);
   if (!validation.success) {
     return { success: false, message: "Invalid announcement data.", errors: validation.error.flatten().fieldErrors };
@@ -1332,7 +1495,7 @@ export async function createAnnouncement(data: z.infer<typeof announcementSchema
   }
 }
 
-export async function getAnnouncements(filters?: { activeOnly?: boolean, nonExpiredOnly?: boolean }): Promise<Announcement[]> {
+export async function getAnnouncementsLogic(filters?: { activeOnly?: boolean, nonExpiredOnly?: boolean }): Promise<Announcement[]> {
   try {
     const announcementsCol = collection(db, 'announcements');
     let conditions = [];
@@ -1371,7 +1534,7 @@ export async function getAnnouncements(filters?: { activeOnly?: boolean, nonExpi
 }
 
 
-export async function updateAnnouncement(id: string, data: Partial<Omit<z.input<typeof announcementSchemaBase>, 'expiryDate'> & { expiryDate?: Date | string }>) {
+export async function updateAnnouncementLogic(id: string, data: Partial<Omit<z.input<typeof announcementSchemaBase>, 'expiryDate'> & { expiryDate?: Date | string }>) {
   try {
     const announcementRef = doc(db, 'announcements', id);
     const currentDocSnap = await getDoc(announcementRef);
@@ -1389,11 +1552,11 @@ export async function updateAnnouncement(id: string, data: Partial<Omit<z.input<
     } else if (data.expiryDate && data.expiryDate instanceof Date) {
         mergedInputData.expiryDate = data.expiryDate;
     }
-    
+
     if (data.showOnce !== undefined) {
         mergedInputData.showOnce = data.showOnce;
     } else if (currentData.showOnce === undefined) {
-        mergedInputData.showOnce = false; 
+        mergedInputData.showOnce = false;
     }
 
 
@@ -1435,7 +1598,7 @@ export async function updateAnnouncement(id: string, data: Partial<Omit<z.input<
 }
 
 
-export async function deleteAnnouncement(id: string) {
+export async function deleteAnnouncementLogic(id: string) {
   try {
     const announcementRef = doc(db, 'announcements', id);
     await deleteDoc(announcementRef);
@@ -1446,19 +1609,23 @@ export async function deleteAnnouncement(id: string) {
   }
 }
 
-// Dashboard Stats Actions
 async function getCollectionCount(collectionName: string, conditions: any[] = []): Promise<number> {
   try {
     const collRef = collection(db, collectionName);
-    const q = query(collRef, ...conditions);
-    const snapshot = await getDocs(q);
-    return snapshot.size;
+    let q;
+    if (conditions.length > 0) {
+        q = query(collRef, ...conditions);
+    } else {
+        q = query(collRef);
+    }
+    const snapshot = await getCountFromServer(q); // Use getCountFromServer
+    return snapshot.data().count;
   } catch (error) {
     console.error(`Error counting documents in ${collectionName}:`, error);
     return 0;
   }
 }
-export async function getDashboardStats(): Promise<DashboardStats> {
+export async function getDashboardStatsLogic(): Promise<DashboardStats> {
   try {
     const [totalCourses, pendingTestimonials, activeUsers, totalUsers] = await Promise.all([
       getCollectionCount('videoCourses'),
@@ -1475,7 +1642,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     };
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
-    return { 
+    return {
       totalCourses: 0,
       pendingTestimonials: 0,
       activeUsers: 0,
@@ -1483,3 +1650,5 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     };
   }
 }
+
+    

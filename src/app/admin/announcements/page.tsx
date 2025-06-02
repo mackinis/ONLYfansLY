@@ -16,7 +16,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { PlusCircle, Edit, Trash2, Loader2, Megaphone, CalendarIcon, Image as ImageIcon, Video as VideoIconLucide, CheckSquare, Square } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { createAnnouncement, getAnnouncements, updateAnnouncement, deleteAnnouncement } from '@/lib/actions';
+// Removed: import { createAnnouncement, getAnnouncements, updateAnnouncement, deleteAnnouncement } from '@/lib/actions';
 import { useTranslation } from '@/context/I18nContext';
 import { DatePicker } from '@/components/ui/date-picker';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -33,38 +33,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { format } from 'date-fns';
-
-
-const announcementFormSchema = z.object({
-  title: z.string().min(3, { message: "Title must be at least 3 characters." }),
-  contentType: z.enum(['image-only', 'text-image', 'text-video', 'video-only'], {
-    required_error: "You need to select a content type.",
-  }),
-  text: z.string().optional(),
-  imageUrl: z.string().url({ message: "Please enter a valid URL for the image." }).optional().or(z.literal('')),
-  videoUrl: z.string().url({ message: "Please enter a valid URL for the video." }).optional().or(z.literal('')),
-  expiryDate: z.date({
-    required_error: "Expiry date is required.",
-    invalid_type_error: "That's not a valid date!",
-  }),
-  isActive: z.boolean().default(true),
-  showOnce: z.boolean().default(false),
-}).superRefine((data, ctx) => {
-  if (data.contentType === 'image-only' && !data.imageUrl) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Image URL is required for 'Image only' type.", path: ['imageUrl'] });
-  }
-  if (data.contentType === 'video-only' && !data.videoUrl) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Video URL is required for 'Video only' type.", path: ['videoUrl'] });
-  }
-  if (data.contentType === 'text-image') {
-    if (!data.text) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Text is required for 'Text + Image' type.", path: ['text'] });
-    if (!data.imageUrl) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Image URL is required for 'Text + Image' type.", path: ['imageUrl'] });
-  }
-  if (data.contentType === 'text-video') {
-    if (!data.text) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Text is required for 'Text + Video' type.", path: ['text'] });
-    if (!data.videoUrl) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Video URL is required for 'Text + Video' type.", path: ['videoUrl'] });
-  }
-});
+import { announcementSchema as announcementFormSchema } from '@/lib/actions'; // Using the schema from actions
 
 type AnnouncementFormValues = z.infer<typeof announcementFormSchema>;
 
@@ -96,7 +65,11 @@ export default function AdminAnnouncementsPage() {
   const fetchAnnouncements = async () => {
     setIsLoading(true);
     try {
-      const fetchedAnnouncements = await getAnnouncements();
+      const response = await fetch('/api/admin/announcements');
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const fetchedAnnouncements = await response.json();
       setAnnouncements(fetchedAnnouncements);
     } catch (error) {
       toast({ title: t('adminAnnouncementsPage.toasts.fetchErrorTitle'), description: error instanceof Error ? error.message : t('adminAnnouncementsPage.toasts.fetchErrorDescription'), variant: 'destructive' });
@@ -148,14 +121,24 @@ export default function AdminAnnouncementsPage() {
   const onSubmit = async (data: AnnouncementFormValues) => {
     setIsSubmitting(true);
     try {
-      let result;
+      let response;
+      let url = '/api/admin/announcements';
+      let method = 'POST';
+
       if (editingAnnouncement) {
-        result = await updateAnnouncement(editingAnnouncement.id, data);
-      } else {
-        result = await createAnnouncement(data);
+        url = `/api/admin/announcements/${editingAnnouncement.id}`;
+        method = 'PUT';
       }
 
-      if (result.success) {
+      response = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         toast({ title: editingAnnouncement ? t('adminAnnouncementsPage.toasts.updateSuccessTitle') : t('adminAnnouncementsPage.toasts.createSuccessTitle'), description: result.message });
         handleCloseModal();
         fetchAnnouncements();
@@ -178,8 +161,12 @@ export default function AdminAnnouncementsPage() {
 
   const handleDeleteAnnouncement = async (announcementId: string) => {
     try {
-      const result = await deleteAnnouncement(announcementId);
-      if (result.success) {
+      const response = await fetch(`/api/admin/announcements/${announcementId}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         toast({ title: t('adminAnnouncementsPage.toasts.deleteSuccessTitle'), description: result.message });
         fetchAnnouncements();
       } else {
@@ -236,7 +223,7 @@ export default function AdminAnnouncementsPage() {
                        </span>
                     </TableCell>
                     <TableCell>{format(new Date(announcement.expiryDate), language === 'es' ? 'dd/MM/yyyy' : 'MM/dd/yyyy')}</TableCell>
-                    <TableCell className="text-center">
+                     <TableCell className="text-center">
                       {announcement.showOnce ? <CheckSquare className="h-5 w-5 text-primary" /> : <Square className="h-5 w-5 text-muted-foreground" />}
                     </TableCell>
                     <TableCell className="text-right space-x-1">
@@ -379,3 +366,5 @@ export default function AdminAnnouncementsPage() {
     </div>
   );
 }
+
+    

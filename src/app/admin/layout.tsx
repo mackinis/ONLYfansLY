@@ -21,12 +21,12 @@ import {
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Film, LayoutDashboard, Video as VideoIconLucide, MessageSquareText, Users, DollarSign, Palette, LogOut, Settings, ShieldCheck, Languages as LanguagesIcon, UserCircle, BookOpenCheck, Settings2, Megaphone, MessageSquare, Loader2 } from 'lucide-react';
+import { Film, LayoutDashboard, Video as VideoIconLucide, MessageSquareText, Users, DollarSign, Palette, LogOut, Settings, ShieldCheck, Languages as LanguagesIcon, UserCircle, BookOpenCheck, Settings2, Megaphone, MessageSquare, Loader2, Smartphone } from 'lucide-react';
 import * as React from "react";
 import { useTranslation } from '@/context/I18nContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { UserProfile, ColorSetting } from '@/lib/types';
-import { getAdminProfile } from '@/lib/actions';
+// Removed: import { getAdminProfile } from '@/lib/actions';
 
 export default function AdminLayout({
   children,
@@ -45,7 +45,11 @@ export default function AdminLayout({
   const fetchAdminDetails = React.useCallback(async () => {
     setIsLoadingProfile(true);
     try {
-      const profile = await getAdminProfile();
+      const response = await fetch('/api/admin/profile');
+      if (!response.ok) {
+        throw new Error('Failed to fetch admin profile');
+      }
+      const profile = await response.json();
       setAdminProfile(profile);
     } catch (error) {
       console.error("Failed to fetch admin profile for layout:", error);
@@ -105,6 +109,7 @@ export default function AdminLayout({
   const settingsNavItems = [
      { href: '/admin/settings/account', labelKey: 'adminLayout.account', icon: UserCircle },
      { href: '/admin/settings/general', labelKey: 'adminLayout.general', icon: Settings2 },
+     { href: '/admin/settings/mobile-apps', labelKey: 'adminLayout.mobileApps', icon: Smartphone },
      { href: '/admin/settings/security', labelKey: 'adminLayout.security', icon: ShieldCheck },
   ];
 

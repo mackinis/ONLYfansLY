@@ -12,7 +12,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { useTranslation } from '@/context/I18nContext';
 import type { SiteSettings, ActiveCurrencySetting, CurrencyDefinition, ExchangeRates } from '@/lib/types';
-import { updateSiteSettings } from '@/lib/actions';
 
 // Define all supported currencies by the platform
 const SUPPORTED_CURRENCIES: CurrencyDefinition[] = [
@@ -156,17 +155,36 @@ export default function CurrenciesAdminPage() {
       allowUserToChooseCurrency: localAllowUserToChooseCurrency,
     };
 
-    const result = await updateSiteSettings(settingsToUpdate);
-    if (result.success) {
-      toast({
-        title: t('adminCurrenciesPage.toasts.settingsSavedTitle'),
-        description: t('adminCurrenciesPage.toasts.settingsSavedUpdatedDescription'),
+    try {
+      const response = await fetch('/api/site-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsToUpdate),
       });
-      await refreshSiteSettings(); 
-    } else {
-      toast({ title: t('adminCurrenciesPage.toasts.errorTitle'), description: result.message || t('adminCurrenciesPage.toasts.genericErrorDescription'), variant: "destructive" });
+      const result = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: t('adminCurrenciesPage.toasts.settingsSavedTitle'),
+          description: result.message || t('adminCurrenciesPage.toasts.settingsSavedUpdatedDescription'),
+        });
+        await refreshSiteSettings();
+      } else {
+        toast({ 
+            title: t('adminCurrenciesPage.toasts.errorTitle'), 
+            description: result.message || t('adminCurrenciesPage.toasts.genericErrorDescription'), 
+            variant: "destructive" 
+        });
+      }
+    } catch (error) {
+      toast({ 
+          title: t('adminCurrenciesPage.toasts.errorTitle'), 
+          description: t('adminCurrenciesPage.toasts.genericErrorDescription'), 
+          variant: "destructive" 
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   if (isLoadingSettings || !currentGlobalSettings) {
@@ -293,5 +311,3 @@ export default function CurrenciesAdminPage() {
     </div>
   );
 }
-
-    

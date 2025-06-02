@@ -32,7 +32,12 @@
     "youtube": "YouTube",
     "copyright": "© {year} {siteTitle}. Todos los derechos reservados.",
     "socialLink": "Enlace Social",
-    "noSocialLinks": "Los enlaces a redes sociales aparecerán aquí."
+    "noSocialLinks": "Los enlaces a redes sociales aparecerán aquí.",
+    "mobileAppsSectionTitle": "Nuestras Apps",
+    "downloadAndroidApp": "Descargar App Android",
+    "downloadIosApp": "Descargar App iOS",
+    "androidAppIconAlt": "Ícono App Android",
+    "iosAppIconAlt": "Ícono App iOS"
   },
   "testimonialModal": {
     "title": "Comparte Tu Experiencia",
@@ -146,6 +151,7 @@
     "appearance": "Apariencia",
     "settings": "Configuración",
     "general": "General",
+    "mobileApps": "Apps Móviles",
     "security": "Seguridad",
     "account": "Cuenta",
     "logout": "Cerrar Sesión",
@@ -193,6 +199,17 @@
     "errorSavingTitle": "Error al Guardar",
     "genericErrorDescription": "Ocurrió un error inesperado al guardar la configuración de idioma."
   },
+  "adminLiveStreamPage": {
+    "title": "Configuración de Transmisión en Vivo",
+    "description": "Gestiona las opciones de la transmisión en vivo.",
+    "loggedInUsersOnly": "Solo para usuarios registrados",
+    "loggedInUsersOnlyDescription": "Restringir el acceso a la transmisión solo a usuarios autenticados.",
+    "saveChanges": "Guardar cambios",
+    "toasts": {
+        "settingsSavedTitle": "Configuración guardada",
+        "settingsSavedDescription": "La configuración de la Transmisión en Vivo ha sido actualizada exitosamente."
+    }
+  },
   "adminLivestream": {
     "pageTitle": "Control de Transmisión en Vivo",
     "defaultStreamTitle": "Evento en Vivo de Aurum",
@@ -226,7 +243,13 @@
       "muteMicButton": "Silenciar Mic",
       "unmuteMicButton": "Activar Mic",
       "muteLocalAudioButton": "Silenciar Vista Previa",
-      "unmuteLocalAudioButton": "Activar Sonido Vista Previa"
+      "unmuteLocalAudioButton": "Activar Sonido Vista Previa",
+      "privateStreamToggleLabel": "Transmisión Privada",
+      "privateStreamToggleDescription": "Solo el usuario específicamente autorizado puede ver. Si está apagado, la transmisión es pública.",
+      "authorizedUserLabel": "Usuario Autorizado para Transmisión Privada:",
+      "noUserAuthorized": "Ninguno (la transmisión será pública si no hay usuario autorizado seleccionado en la página de Usuarios)",
+      "configCard.authorizedUserLabel": "Usuario Autorizado:",
+      "configCard.noUserAuthorized": "Pública / Ningún usuario específico autorizado."
     },
     "statsCard": {
       "title": "Estadísticas de Transmisión",
@@ -265,7 +288,12 @@
       "microphoneUnmuted": "Micrófono activado para los espectadores.",
       "localAudioStatusTitle": "Audio de Vista Previa Local",
       "localAudioMuted": "Audio de vista previa local silenciado.",
-      "localAudioUnmuted": "Audio de vista previa local activado."
+      "localAudioUnmuted": "Audio de vista previa local activado.",
+      "privateStreamInfo": "La transmisión está configurada como privada para {userName}.",
+      "privateStreamNoUserWarning": "Advertencia: La transmisión está configurada como privada, pero NINGÚN usuario está autorizado. Será inaccesible.",
+      "publicStreamInfo": "La transmisión está configurada como pública.",
+      "loggedInOnlyStreamInfo": "La transmisión es solo para usuarios registrados.",
+      "loggedInOnlyClearsSpecificUser": "Activar 'Solo para usuarios registrados' anulará cualquier autorización de usuario específico para esta transmisión."
     }
   },
   "adminCoursesPage": {
@@ -343,8 +371,12 @@
       "verified": "Verificado",
       "status": "Estado",
       "canSubmitTestimonial": "Permiso Testimonio",
+      "authorizeLive": "Acceso Vivo Privado",
       "actions": "Acciones"
     },
+    "authorizeButton": "Autorizar para Vivo Privado",
+    "deauthorizeButton": "Revocar / Hacer Público",
+    "currentlyAuthorizedForLive": "Autorizado para Transmisión en Vivo",
     "toggleActivationAria": "Alternar activación para {email}",
     "toggleTestimonialPermissionAria": "Alternar permiso de testimonio para {email}",
     "status": {
@@ -375,7 +407,12 @@
       "genericErrorDescription": "Ocurrió un error inesperado.",
       "comingSoonTitle": "Próximamente",
       "editUserComingSoon": "La funcionalidad de edición de usuario estará disponible pronto.",
-      "addUserComingSoon": "La funcionalidad para agregar usuarios estará disponible pronto."
+      "addUserComingSoon": "La funcionalidad para agregar usuarios estará disponible pronto.",
+      "liveAuthSetSuccess": "Usuario {userName} ahora está autorizado para la transmisión en vivo privada.",
+      "liveDeauthSuccess": "Autorización de transmisión en vivo eliminada. La transmisión es ahora pública.",
+      "liveAuthError": "Error al actualizar la autorización de transmisión en vivo.",
+      "liveAuthSuccessTitle": "Autorización Actualizada",
+      "specificAuthDisabledTooltip": "Deshabilitado porque 'Solo para usuarios registrados' está activo."
     }
   },
   "adminTestimonialsPage": {
@@ -513,7 +550,8 @@
       "updateTitle": "Apariencia Actualizada",
       "updateDescription": "Los colores del sitio web han sido guardados y aplicados.",
       "resetTitle": "Apariencia Restablecida",
-      "resetDescription": "Los colores del sitio web han sido restablecidos a los predeterminados."
+      "resetDescription": "Los colores del sitio web han sido restablecidos a los predeterminados.",
+      "errorTitle": "Error"
     },
     "colorLabels": {
       "background": "Fondo",
@@ -676,6 +714,37 @@
       "updateSuccessDescription": "La configuración general del sitio ha sido guardada en Firestore.",
       "updateErrorTitle": "Actualización Fallida",
       "genericError": "Ocurrió un error inesperado."
+    }
+  },
+  "adminMobileAppsPage": {
+    "title": "Configuración Apps Móviles",
+    "cardTitle": "Configuración Enlaces Apps Móviles",
+    "cardDescription": "Gestiona la sección 'Nuestras Apps' en el pie de página, incluyendo visibilidad y enlaces a tiendas de apps.",
+    "sectionTitleLabel": "Título Sección Pie de Página",
+    "sectionTitlePlaceholder": "Ej: Descarga Nuestras Apps",
+    "sectionTitleDescription": "El título que se muestra sobre los enlaces de descarga en el pie de página.",
+    "showSectionLabel": "Mostrar Sección 'Nuestras Apps' en Pie de Página",
+    "showSectionDescription": "Habilita esto para mostrar la sección de descarga de apps móviles en el pie de página del sitio.",
+    "androidAppCardTitle": "App Android",
+    "showAndroidAppLabel": "Mostrar Enlace App Android",
+    "showAndroidAppDescription": "Mostrar el enlace de descarga de la app Android.",
+    "androidAppLinklabel": "Enlace App Android (Google Play)",
+    "androidAppLinkPlaceholder": "https://play.google.com/store/apps/details?id=...",
+    "androidAppIconUrlLabel": "URL Ícono App Android",
+    "androidAppIconUrlPlaceholder": "https://ejemplo.com/icono-android.png",
+    "iosAppCardTitle": "App iOS",
+    "showIosAppLabel": "Mostrar Enlace App iOS",
+    "showIosAppDescription": "Mostrar el enlace de descarga de la app iOS.",
+    "iosAppLinklabel": "Enlace App iOS (Apple App Store)",
+    "iosAppLinkPlaceholder": "https://apps.apple.com/app/...",
+    "iosAppIconUrlLabel": "URL Ícono App iOS",
+    "iosAppIconUrlPlaceholder": "https://ejemplo.com/icono-ios.png",
+    "appIconUrlDescription": "URL para la imagen del ícono de la app (ej: PNG, SVG).",
+    "saveButton": "Guardar Configuración Apps Móviles",
+    "toasts": {
+        "updateSuccessTitle": "Configuración Apps Móviles Actualizada",
+        "updateSuccessDescription": "La configuración de enlaces de apps móviles ha sido guardada.",
+        "updateErrorTitle": "Actualización Fallida"
     }
   },
   "registerPage": {
@@ -1090,3 +1159,5 @@
     }
   }
 }
+
+    

@@ -14,7 +14,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageSquare, Save, Loader2, HelpCircle, Paperclip, Smile, Moon, Sun, Phone, Send, ThumbsUp, Heart, Star, Bell } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
-import { updateSiteSettings } from '@/lib/actions';
 import type { SiteSettings } from '@/lib/types';
 import { useTranslation } from '@/context/I18nContext';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -91,31 +90,50 @@ export default function AdminChatSettingsPage() {
   async function onSubmit(data: ChatSettingsFormValues) {
     setIsSubmitting(true);
     try {
-      const result = await updateSiteSettings({
-          whatsAppEnabled: data.whatsAppEnabled,
-          whatsAppPhoneNumber: data.whatsAppPhoneNumber,
-          whatsAppDefaultMessage: data.whatsAppDefaultMessage,
-          whatsAppIcon: data.whatsAppIcon,
-          whatsAppCustomIconUrl: data.whatsAppIcon === 'customUrl' ? data.whatsAppCustomIconUrl : '', // Clear if not custom
-          whatsAppButtonSize: data.whatsAppButtonSize,
-          whatsAppIconSize: data.whatsAppIconSize,
-      });
+      const payload = {
+        whatsAppEnabled: data.whatsAppEnabled,
+        whatsAppPhoneNumber: data.whatsAppPhoneNumber,
+        whatsAppDefaultMessage: data.whatsAppDefaultMessage,
+        whatsAppIcon: data.whatsAppIcon,
+        whatsAppCustomIconUrl: data.whatsAppIcon === 'customUrl' ? data.whatsAppCustomIconUrl : '',
+        whatsAppButtonSize: data.whatsAppButtonSize,
+        whatsAppIconSize: data.whatsAppIconSize,
+      };
 
-      if (result.success && result.updatedSettings) {
-        toast({ title: t('adminChatPage.toasts.updateSuccessTitle'), description: t('adminChatPage.toasts.updateSuccessDescription') });
+      const response = await fetch('/api/site-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      
+      const result = await response.json();
+
+      if (response.ok) { 
+        toast({ 
+            title: t('adminChatPage.toasts.updateSuccessTitle'), 
+            description: result.message || t('adminChatPage.toasts.updateSuccessDescription') 
+        });
         await refreshSiteSettings(); 
       } else {
-        toast({ title: t('adminChatPage.toasts.updateErrorTitle'), description: result.message || t('adminAccountPage.toasts.genericError'), variant: 'destructive' });
-         if (result.errors) {
+        toast({ 
+            title: t('adminChatPage.toasts.updateErrorTitle'), 
+            description: result.message || t('adminAccountPage.toasts.genericError'), 
+            variant: 'destructive' 
+        });
+         if (result.errors) { 
             Object.entries(result.errors).forEach(([field, errors]) => {
-             if (errors && errors.length > 0) {
+             if (Array.isArray(errors) && errors.length > 0) {
                 form.setError(field as keyof ChatSettingsFormValues, { message: errors[0] as string });
              }
           });
         }
       }
     } catch (error) {
-      toast({ title: t('adminChatPage.toasts.updateErrorTitle'), description: error instanceof Error ? error.message : t('adminAccountPage.toasts.genericError'), variant: 'destructive' });
+      toast({ 
+          title: t('adminChatPage.toasts.updateErrorTitle'), 
+          description: error instanceof Error ? error.message : t('adminAccountPage.toasts.genericError'), 
+          variant: 'destructive' 
+      });
     } finally {
       setIsSubmitting(false);
     }

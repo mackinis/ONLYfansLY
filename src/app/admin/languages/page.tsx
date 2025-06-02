@@ -11,7 +11,6 @@ import { Languages as LanguagesIcon, Save, Loader2 } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
 import type { SiteSettings } from '@/lib/types';
-import { updateSiteSettings } from '@/lib/actions';
 
 export default function LanguagesAdminPage() {
   const { t, siteSettings, isLoadingSettings, refreshSiteSettings } = useTranslation();
@@ -32,15 +31,20 @@ export default function LanguagesAdminPage() {
   const handleSaveChanges = async () => {
     setIsSubmitting(true);
     try {
-      const result = await updateSiteSettings({
-        defaultLanguage: localDefaultLanguage,
-        allowUserToChooseLanguage: localAllowUserToChoose,
+      const response = await fetch('/api/site-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            defaultLanguage: localDefaultLanguage,
+            allowUserToChooseLanguage: localAllowUserToChoose,
+        }),
       });
+      const result = await response.json();
 
-      if (result.success) {
+      if (response.ok) {
         toast({
           title: t('adminLanguagesPage.settingsSaved'),
-          description: t('adminLanguagesPage.settingsSavedDescription'),
+          description: result.message || t('adminLanguagesPage.settingsSavedDescription'),
         });
         await refreshSiteSettings();
       } else {

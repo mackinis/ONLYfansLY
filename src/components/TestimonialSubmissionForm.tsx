@@ -18,22 +18,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
-import { submitTestimonial } from '@/lib/actions';
+// Removed: import { submitTestimonial } from '@/lib/actions';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SessionUserProfile, TestimonialMediaOption } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
+import { testimonialSubmitSchema } from '@/lib/actions'; // Import schema
 
-const testimonialFormSchema = z.object({
-  author: z.string().min(2).max(50),
-  text: z.string().min(10).max(500),
-  email: z.string().email(),
-  userId: z.string().min(1),
-  photoUrlsInput: z.string().optional(),
-  videoUrlsInput: z.string().optional(),
-});
-
-type TestimonialFormValues = z.infer<typeof testimonialFormSchema>;
+type TestimonialFormValues = z.infer<typeof testimonialSubmitSchema>;
 
 interface TestimonialSubmissionFormProps {
   isOpen?: boolean;
@@ -44,11 +36,11 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
   const { t, siteSettings, isLoadingSettings } = useTranslation();
   const [loggedInUser, setLoggedInUser] = useState<SessionUserProfile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  
+
   const [effectiveMediaOptions, setEffectiveMediaOptions] = useState<TestimonialMediaOption>('both');
 
   const form = useForm<TestimonialFormValues>({
-    resolver: zodResolver(testimonialFormSchema),
+    resolver: zodResolver(testimonialSubmitSchema),
     defaultValues: {
       author: '',
       text: '',
@@ -58,7 +50,7 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
       videoUrlsInput: '',
     },
   });
-  
+
   useEffect(() => {
     if (!isLoadingSettings && siteSettings) {
       setEffectiveMediaOptions(siteSettings.testimonialMediaOptions || 'both');
@@ -66,7 +58,7 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
   }, [siteSettings, isLoadingSettings]);
 
   useEffect(() => {
-    if (isOpen === undefined || isOpen) { 
+    if (isOpen === undefined || isOpen) {
       setIsLoadingUser(true);
       if (typeof window !== 'undefined') {
         const storedUserProfile = sessionStorage.getItem('aurum_user_profile');
@@ -106,37 +98,52 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
       return;
     }
 
-    const result = await submitTestimonial({
+    const submissionData = {
       author: `${loggedInUser.name} ${loggedInUser.surname}`,
       email: loggedInUser.email,
       userId: loggedInUser.id,
       text: data.text,
       photoUrlsInput: (effectiveMediaOptions === 'photos' || effectiveMediaOptions === 'both') ? data.photoUrlsInput : undefined,
       videoUrlsInput: (effectiveMediaOptions === 'videos' || effectiveMediaOptions === 'both') ? data.videoUrlsInput : undefined,
-    });
+    };
 
-    if (result.success) {
-      toast({
-        title: t('testimonialForm.toast.successTitle'),
-        description: t('testimonialForm.toast.successDescription'),
+    try {
+      const response = await fetch('/api/testimonials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submissionData),
       });
-      form.reset({
-        author: `${loggedInUser.name} ${loggedInUser.surname}`,
-        email: loggedInUser.email,
-        userId: loggedInUser.id,
-        text: '',
-        photoUrlsInput: '',
-        videoUrlsInput: '',
-      });
-    } else {
-      toast({
-        title: t('testimonialForm.toast.errorTitle'),
-        description: result.message || t('testimonialForm.toast.errorDescription'),
-        variant: 'destructive',
-      });
+      const result = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: t('testimonialForm.toast.successTitle'),
+          description: t('testimonialForm.toast.successDescription'),
+        });
+        form.reset({
+          author: `${loggedInUser.name} ${loggedInUser.surname}`,
+          email: loggedInUser.email,
+          userId: loggedInUser.id,
+          text: '',
+          photoUrlsInput: '',
+          videoUrlsInput: '',
+        });
+      } else {
+        toast({
+          title: t('testimonialForm.toast.errorTitle'),
+          description: result.message || t('testimonialForm.toast.errorDescription'),
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+        toast({
+          title: t('testimonialForm.toast.errorTitle'),
+          description: t('testimonialForm.toast.genericError'),
+          variant: 'destructive',
+        });
     }
   }
-  
+
   if (isOpen === false) return null;
 
 
@@ -251,4 +258,6 @@ export default function TestimonialSubmissionForm({ isOpen }: TestimonialSubmiss
       </Form>
     </div>
   );
-}   
+}
+
+    

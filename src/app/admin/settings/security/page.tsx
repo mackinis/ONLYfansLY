@@ -11,12 +11,10 @@ import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { ShieldCheck, Save, Loader2 } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
-import { getAdminProfile, updateAdminPassword } from '@/lib/actions';
 import type { UserProfile } from '@/lib/types';
 import { useTranslation } from '@/context/I18nContext';
 
 const passwordChangeFormSchema = z.object({
-  // currentPassword: z.string().min(1, { message: "Current password is required." }), // Optional: Add if current password verification is needed
   newPassword: z.string().min(8, { message: "New password must be at least 8 characters." }),
   confirmPassword: z.string(),
 }).refine(data => data.newPassword === data.confirmPassword, {
@@ -36,7 +34,6 @@ export default function AdminSecuritySettingsPage() {
   const form = useForm<PasswordChangeFormValues>({
     resolver: zodResolver(passwordChangeFormSchema),
     defaultValues: {
-      // currentPassword: '',
       newPassword: '',
       confirmPassword: '',
     },
@@ -46,8 +43,13 @@ export default function AdminSecuritySettingsPage() {
     async function fetchAdminId() {
       setIsLoadingAdmin(true);
       try {
-        const profile = await getAdminProfile();
-        if (profile) {
+        const response = await fetch('/api/admin/profile');
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || t('adminSecurityPage.toasts.adminNotFound'));
+        }
+        const profile: UserProfile = await response.json();
+        if (profile && profile.id) {
           setAdminId(profile.id);
         } else {
           toast({ title: t('adminSecurityPage.toasts.fetchErrorTitle'), description: t('adminSecurityPage.toasts.adminNotFound'), variant: 'destructive' });
@@ -68,21 +70,29 @@ export default function AdminSecuritySettingsPage() {
         return;
     }
     setIsSubmitting(true);
-    // In a real app, you'd likely send currentPassword to the server for verification
-    // const { currentPassword, ...passwordData } = data; 
-    const passwordData = { newPassword: data.newPassword, confirmPassword: data.confirmPassword };
+    const payload = {
+      adminId: adminId,
+      newPassword: data.newPassword,
+      confirmPassword: data.confirmPassword, // Though refine handles this, API might double check
+    };
 
     try {
-      const result = await updateAdminPassword(adminId, passwordData);
-      if (result.success) {
+      const response = await fetch('/api/admin/security/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         toast({ title: t('adminSecurityPage.toasts.updateSuccessTitle'), description: result.message });
         form.reset();
       } else {
-        toast({ title: t('adminSecurityPage.toasts.updateErrorTitle'), description: result.message, variant: 'destructive' });
-         if (result.errors) {
+        toast({ title: t('adminSecurityPage.toasts.updateErrorTitle'), description: result.message || t('adminAccountPage.toasts.genericError'), variant: 'destructive' });
+        if (result.errors) {
             Object.entries(result.errors).forEach(([field, errors]) => {
-             if (errors && errors.length > 0) {
-                form.setError(field as keyof PasswordChangeFormValues, { message: errors[0] });
+             if (Array.isArray(errors) && errors.length > 0) { // Check if errors is an array
+                form.setError(field as keyof PasswordChangeFormValues, { message: errors[0] as string });
              }
           });
         }
@@ -116,13 +126,6 @@ export default function AdminSecuritySettingsPage() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <CardContent className="space-y-6">
-              {/* <FormField control={form.control} name="currentPassword" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('adminSecurityPage.form.currentPassword')}</FormLabel>
-                  <FormControl><PasswordInput placeholder="••••••••" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} /> */}
               <FormField control={form.control} name="newPassword" render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t('adminSecurityPage.form.newPassword')}</FormLabel>

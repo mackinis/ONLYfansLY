@@ -14,7 +14,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Settings2, Save, Loader2, PlusCircle, Trash2, Link as LinkIcon, Sparkles, Info, Image as ImageIconLucide, Heading1, Ruler, Image as ImageIconShadcn, Camera, Video, Ban, Clock, Palette } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
-import { updateSiteSettings } from '@/lib/actions';
 import type { SiteSettings, SocialLink, HeaderDisplayMode, FooterDisplayMode, TestimonialMediaOption, HeroTaglineSize } from '@/lib/types';
 import { useTranslation } from '@/context/I18nContext';
 import { Separator } from '@/components/ui/separator';
@@ -118,34 +117,58 @@ export default function AdminGeneralSettingsPage() {
         id: link.id || `social-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       })) || [];
 
-      const result = await updateSiteSettings({
-          siteTitle: data.siteTitle,
-          siteIconUrl: data.siteIconUrl,
-          headerIconUrl: data.headerIconUrl,
-          heroTitle: data.heroTitle,
-          heroTagline: data.heroTagline,
-          heroTaglineColor: data.heroTaglineColor,
-          heroTaglineSize: data.heroTaglineSize,
-          heroSubtitle: data.heroSubtitle,
-          maintenanceMode: data.maintenanceMode,
-          socialLinks: socialLinksToSave,
-          aiCurationEnabled: data.aiCurationEnabled,
-          aiCurationMinTestimonials: data.aiCurationMinTestimonials,
-          testimonialMediaOptions: data.testimonialMediaOptions,
-          testimonialEditGracePeriodMinutes: data.testimonialEditGracePeriodMinutes,
-          headerDisplayMode: data.headerDisplayMode,
-          footerDisplayMode: data.footerDisplayMode,
-          footerLogoSize: data.footerLogoSize,
+      const response = await fetch('/api/site-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            siteTitle: data.siteTitle,
+            siteIconUrl: data.siteIconUrl,
+            headerIconUrl: data.headerIconUrl,
+            heroTitle: data.heroTitle,
+            heroTagline: data.heroTagline,
+            heroTaglineColor: data.heroTaglineColor,
+            heroTaglineSize: data.heroTaglineSize,
+            heroSubtitle: data.heroSubtitle,
+            maintenanceMode: data.maintenanceMode,
+            socialLinks: socialLinksToSave,
+            aiCurationEnabled: data.aiCurationEnabled,
+            aiCurationMinTestimonials: data.aiCurationMinTestimonials,
+            testimonialMediaOptions: data.testimonialMediaOptions,
+            testimonialEditGracePeriodMinutes: data.testimonialEditGracePeriodMinutes,
+            headerDisplayMode: data.headerDisplayMode,
+            footerDisplayMode: data.footerDisplayMode,
+            footerLogoSize: data.footerLogoSize,
+        }),
       });
+      
+      const result = await response.json();
 
-      if (result.success && result.updatedSettings) {
-        toast({ title: t('adminGeneralPage.toasts.updateSuccessTitle'), description: t('adminGeneralPage.toasts.updateSuccessDescription') });
+      if (response.ok) {
+        toast({ 
+            title: t('adminGeneralPage.toasts.updateSuccessTitle'), 
+            description: result.message || t('adminGeneralPage.toasts.updateSuccessDescription') 
+        });
         await refreshSiteSettings(); 
       } else {
-        toast({ title: t('adminGeneralPage.toasts.updateErrorTitle'), description: result.message || t('adminAccountPage.toasts.genericError'), variant: 'destructive' });
+        toast({ 
+            title: t('adminGeneralPage.toasts.updateErrorTitle'), 
+            description: result.message || t('adminAccountPage.toasts.genericError'), 
+            variant: 'destructive' 
+        });
+         if (result.errors) {
+            Object.entries(result.errors).forEach(([field, errors]) => {
+                if (Array.isArray(errors) && errors.length > 0) {
+                    form.setError(field as keyof SiteSettingsFormValues, { message: errors[0] as string });
+                }
+            });
+        }
       }
     } catch (error) {
-      toast({ title: t('adminGeneralPage.toasts.updateErrorTitle'), description: error instanceof Error ? error.message : t('adminAccountPage.toasts.genericError'), variant: 'destructive' });
+      toast({ 
+          title: t('adminGeneralPage.toasts.updateErrorTitle'), 
+          description: error instanceof Error ? error.message : t('adminAccountPage.toasts.genericError'), 
+          variant: 'destructive' 
+      });
     } finally {
       setIsSubmitting(false);
     }

@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { Film, MailCheck, Send, Loader2 } from 'lucide-react';
-import { getUserByEmailForLogin, verifyUserActivationToken, resendActivationToken } from '@/lib/actions';
+// Removed: import { getUserByEmailForLogin, verifyUserActivationToken, resendActivationToken } from '@/lib/actions';
 import type { UserProfile, SessionUserProfile } from '@/lib/types';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -37,7 +37,7 @@ export default function LoginPage() {
   const { toast } = useToast();
   const router = useRouter();
   const [showTokenForm, setShowTokenForm] = useState(false);
-  const [currentUserForActivation, setCurrentUserForActivation] = useState<UserProfile | null>(null);
+  const [currentUserForActivation, setCurrentUserForActivation] = useState<{id: string, email: string} | null>(null);
   const [isResendingToken, setIsResendingToken] = useState(false);
   const [isVerifyingToken, setIsVerifyingToken] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -68,60 +68,39 @@ export default function LoginPage() {
     }
 
     try {
-      const user = await getUserByEmailForLogin(data.email);
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await response.json();
 
-      if (!user) {
-        toast({ title: t('loginPage.toasts.loginErrorTitle'), description: t('loginPage.toasts.incorrectCredentials'), variant: 'destructive' });
-        setIsLoggingIn(false);
+      if (response.ok && result.success) {
+        toast({ title: t('loginPage.toasts.loginSuccessTitle'), description: t('loginPage.toasts.welcomeBack') });
+        if (result.isAdmin) {
+            if (typeof window !== 'undefined') {
+                sessionStorage.setItem('aurum_is_admin_logged_in', 'true');
+                sessionStorage.setItem('aurum_user_profile', JSON.stringify(result.user as SessionUserProfile));
+            }
+            router.push('/admin');
+        } else {
+            if (typeof window !== 'undefined') {
+                sessionStorage.setItem('aurum_user_id', result.user.id);
+                sessionStorage.setItem('aurum_user_profile', JSON.stringify(result.user as SessionUserProfile));
+            }
+            router.push('/account');
+        }
         dispatchLoginStatusChangedEvent();
-        return;
-      }
-
-      const passwordMatch = data.password === user.passwordHash;
-
-      if (!passwordMatch) {
-        toast({ title: t('loginPage.toasts.loginErrorTitle'), description: t('loginPage.toasts.incorrectCredentials'), variant: 'destructive' });
-        setIsLoggingIn(false);
-        dispatchLoginStatusChangedEvent();
-        return;
-      }
-
-      if (!user.isVerified) {
-        setCurrentUserForActivation(user);
+      } else if (result.needsActivation) {
+        setCurrentUserForActivation({id: result.userId, email: result.email});
         tokenForm.reset({ activationToken: '' });
         setShowTokenForm(true);
         toast({ title: t('loginPage.toasts.unverifiedAccountTitle'), description: t('loginPage.toasts.enterActivationToken') });
-        setIsLoggingIn(false);
         dispatchLoginStatusChangedEvent();
-        return;
-      }
-
-      if (!user.isActive) {
-        toast({ title: t('loginPage.toasts.inactiveAccountTitle'), description: t('loginPage.toasts.contactSupport'), variant: 'destructive' });
-        setIsLoggingIn(false);
-        dispatchLoginStatusChangedEvent();
-        return;
-      }
-
-      toast({ title: t('loginPage.toasts.loginSuccessTitle'), description: t('loginPage.toasts.welcomeBack') });
-
-      if (user.role === 'admin') {
-        if (typeof window !== 'undefined') {
-            sessionStorage.setItem('aurum_is_admin_logged_in', 'true');
-            const adminProfile: SessionUserProfile = { id: user.id, name: user.name, surname: user.surname, email: user.email, role: 'admin' };
-            sessionStorage.setItem('aurum_user_profile', JSON.stringify(adminProfile));
-        }
-        router.push('/admin');
       } else {
-         if (typeof window !== 'undefined') {
-            sessionStorage.setItem('aurum_user_id', user.id);
-            const userProfile: SessionUserProfile = { id: user.id, name: user.name, surname: user.surname, email: user.email, role: 'user' };
-            sessionStorage.setItem('aurum_user_profile', JSON.stringify(userProfile));
-        }
-        router.push('/account'); // Redirect regular user to their account page
+        toast({ title: t('loginPage.toasts.loginErrorTitle'), description: result.message || t('loginPage.toasts.incorrectCredentials'), variant: 'destructive' });
+        dispatchLoginStatusChangedEvent();
       }
-      dispatchLoginStatusChangedEvent();
-
     } catch (error) {
       toast({ title: t('loginPage.toasts.errorTitle'), description: t('loginPage.toasts.unexpectedError'), variant: 'destructive' });
       dispatchLoginStatusChangedEvent();
@@ -134,8 +113,14 @@ export default function LoginPage() {
     if (!currentUserForActivation) return;
     setIsVerifyingToken(true);
     try {
-      const result = await verifyUserActivationToken(currentUserForActivation.id, data.activationToken);
-      if (result.success) {
+      const response = await fetch('/api/auth/verify-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUserForActivation.id, token: data.activationToken }),
+      });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         toast({ title: t('loginPage.toasts.activationSuccessTitle'), description: result.message });
         setShowTokenForm(false);
         setCurrentUserForActivation(null);
@@ -155,8 +140,14 @@ export default function LoginPage() {
     if (!currentUserForActivation) return;
     setIsResendingToken(true);
     try {
-      const result = await resendActivationToken(currentUserForActivation.email);
-      if (result.success) {
+      const response = await fetch('/api/auth/resend-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: currentUserForActivation.email }),
+      });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         toast({ title: t('loginPage.toasts.tokenResentTitle'), description: result.message });
       } else {
         toast({ title: t('loginPage.toasts.resendErrorTitle'), description: result.message, variant: 'destructive' });
@@ -262,3 +253,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    

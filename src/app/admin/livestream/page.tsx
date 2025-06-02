@@ -8,14 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Radio, Settings, StopCircle, Video as VideoIcon, AlertTriangle, Save, Mic, MicOff, Loader2, VolumeX, Volume2, Users } from "lucide-react";
+import { Radio, Settings, StopCircle, Video as VideoIconLucideSvg, AlertTriangle, Save, Mic, MicOff, Loader2, VolumeX, Volume2, Users, UserCheck, ShieldAlert, CheckCircle, Eye, EyeOff } from "lucide-react"; // Renamed VideoIcon
 import { useToast } from '@/hooks/use-toast';
 import { io, Socket } from 'socket.io-client';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useTranslation } from '@/context/I18nContext';
-import { updateSiteSettings } from '@/lib/actions';
-import type { SiteSettings } from '@/lib/types';
+import type { SiteSettings, UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
+// import { FormDescription } from '@/components/ui/form'; // No longer needed if not using RHF for this
 
 
 const PC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -28,6 +28,10 @@ export default function LiveStreamAdminPage() {
   const [currentLiveStreamTitle, setCurrentLiveStreamTitle] = useState('');
   const [localDefaultStreamTitle, setLocalDefaultStreamTitle] = useState('');
   const [localOfflineMessage, setLocalOfflineMessage] = useState('');
+  const [localLiveStreamForLoggedInOnly, setLocalLiveStreamForLoggedInOnly] = useState(false);
+  const [authorizedUserForStream, setAuthorizedUserForStream] = useState<UserProfile | null>(null);
+  const [isLoadingAuthorizedUser, setIsLoadingAuthorizedUser] = useState(false);
+
 
   const [socket, setSocket] = useState<Socket | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -35,7 +39,7 @@ export default function LiveStreamAdminPage() {
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [viewerCount, setViewerCount] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingSettings, setIsSubmittingSettings] = useState(false);
   const [isMicrophoneMuted, setIsMicrophoneMuted] = useState(false);
   const [isLocalPreviewMuted, setIsLocalPreviewMuted] = useState(true);
 
@@ -45,6 +49,22 @@ export default function LiveStreamAdminPage() {
       setCurrentLiveStreamTitle(siteSettings.liveStreamDefaultTitle || t('adminLivestream.defaultStreamTitle'));
       setLocalDefaultStreamTitle(siteSettings.liveStreamDefaultTitle || t('adminLivestream.defaultStreamTitle'));
       setLocalOfflineMessage(siteSettings.liveStreamOfflineMessage || t('adminLivestream.defaultOfflineMessage'));
+      setLocalLiveStreamForLoggedInOnly(siteSettings.liveStreamForLoggedInUsersOnly || false);
+      
+      if (siteSettings.liveStreamAuthorizedUserId) {
+        setIsLoadingAuthorizedUser(true);
+        fetch(`/api/users/${siteSettings.liveStreamAuthorizedUserId}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(userProfile => setAuthorizedUserForStream(userProfile))
+          .catch(err => {
+            console.error("Failed to fetch authorized user details:", err);
+            setAuthorizedUserForStream(null);
+          })
+          .finally(() => setIsLoadingAuthorizedUser(false));
+      } else {
+        setAuthorizedUserForStream(null);
+        setIsLoadingAuthorizedUser(false);
+      }
     }
   }, [siteSettings, t]);
 
@@ -55,8 +75,12 @@ export default function LiveStreamAdminPage() {
 
     newSocket.on('connect', () => {
       console.log('Admin connected to Socket.IO server', newSocket.id);
-      if (isStreaming && localStream) { 
-        newSocket.emit('register-broadcaster', { streamTitle: currentLiveStreamTitle });
+      if (isStreaming && localStream && siteSettings) { 
+        newSocket.emit('register-broadcaster', { 
+            streamTitle: currentLiveStreamTitle,
+            authorizedUserId: siteSettings.liveStreamAuthorizedUserId || null,
+            forLoggedInUsersOnly: siteSettings.liveStreamForLoggedInUsersOnly || false
+        });
       }
     });
 
@@ -85,7 +109,7 @@ export default function LiveStreamAdminPage() {
     });
 
     newSocket.on('new-viewer', async ({ viewerId }) => {
-      if (!localStream) {
+      if (!localStream || !isStreaming) { // Also check if admin is actually streaming
         return;
       }
       if (peerConnectionsRef.current.has(viewerId)) {
@@ -160,7 +184,7 @@ export default function LiveStreamAdminPage() {
       setSocket(null);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localStream, isStreaming, toast, t, currentLiveStreamTitle]);
+  }, [localStream, isStreaming, toast, t, currentLiveStreamTitle, siteSettings]);
 
   useEffect(() => {
     if (localVideoRef.current) {
@@ -201,6 +225,10 @@ export default function LiveStreamAdminPage() {
       toast({ title: t('adminLivestream.toast.errorTitle'), description: t('adminLivestream.toast.socketNotConnectedError'), variant: 'destructive' });
       return;
     }
+    if (isLoadingSettings || !siteSettings) {
+        toast({ title: t('adminLivestream.toast.errorTitle'), description: "Site settings not loaded yet.", variant: 'destructive' });
+        return;
+    }
 
     if (isStreaming) { 
       if (localStream) {
@@ -226,11 +254,26 @@ export default function LiveStreamAdminPage() {
       if (stream) {
         stream.getAudioTracks().forEach(track => track.enabled = !isMicrophoneMuted);
         
+        const authorizedUserId = siteSettings.liveStreamAuthorizedUserId || null;
+        const forLoggedInOnly = siteSettings.liveStreamForLoggedInUsersOnly || false;
+        
         if (socket && socket.connected) {
-            socket.emit('register-broadcaster', { streamTitle: currentLiveStreamTitle });
+            socket.emit('register-broadcaster', { 
+                streamTitle: currentLiveStreamTitle,
+                authorizedUserId: authorizedUserId,
+                forLoggedInUsersOnly: forLoggedInOnly
+            });
         }
         setIsStreaming(true); 
-        toast({ title: t('adminLivestream.toast.streamStartingTitle'), description: t('adminLivestream.toast.streamStartingDescription') });
+        if (authorizedUserId && authorizedUserForStream) {
+            toast({ title: t('adminLivestream.toast.streamStartingTitle'), description: t('adminLivestream.toast.privateStreamInfo', {userName: authorizedUserForStream.email}) });
+        } else if (authorizedUserId && !authorizedUserForStream && !isLoadingAuthorizedUser) {
+            toast({ title: t('adminLivestream.toast.streamStartingTitle'), description: t('adminLivestream.toast.privateStreamNoUserWarning'), variant: 'destructive' });
+        } else if (forLoggedInOnly) {
+            toast({ title: t('adminLivestream.toast.streamStartingTitle'), description: t('adminLivestream.toast.loggedInOnlyStreamInfo') });
+        } else {
+            toast({ title: t('adminLivestream.toast.streamStartingTitle'), description: t('adminLivestream.toast.publicStreamInfo') });
+        }
       } else {
          setIsStreaming(false); 
       }
@@ -245,27 +288,66 @@ export default function LiveStreamAdminPage() {
   };
   
   const handleSaveChanges = async () => {
-    setIsSubmitting(true);
+    setIsSubmittingSettings(true);
     const settingsToUpdate: Partial<SiteSettings> = {
       liveStreamDefaultTitle: localDefaultStreamTitle,
       liveStreamOfflineMessage: localOfflineMessage,
+      liveStreamForLoggedInUsersOnly: localLiveStreamForLoggedInOnly,
+      liveStreamAuthorizedUserId: localLiveStreamForLoggedInOnly ? null : siteSettings?.liveStreamAuthorizedUserId
     };
 
-    const result = await updateSiteSettings(settingsToUpdate);
-    if (result.success) {
-      toast({
-        title: t('adminLivestream.toast.settingsSavedTitle'),
-        description: t('adminLivestream.toast.persistentSettingsSavedDescription'),
-      });
-      await refreshSiteSettings();
-      if (isStreaming && socket && socket.connected && currentLiveStreamTitle !== localDefaultStreamTitle) {
-         setCurrentLiveStreamTitle(localDefaultStreamTitle); 
-         socket.emit('update-stream-title', { streamTitle: localDefaultStreamTitle });
-      }
-    } else {
-      toast({ title: t('adminLivestream.toast.errorTitle'), description: result.message || t('adminLivestream.toast.genericError'), variant: "destructive" });
+    try {
+        const response = await fetch('/api/site-settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settingsToUpdate),
+        });
+        const result = await response.json();
+
+        if (response.ok) {
+            toast({
+                title: t('adminLivestream.toast.settingsSavedTitle'),
+                description: result.message || t('adminLivestream.toast.persistentSettingsSavedDescription'),
+            });
+            await refreshSiteSettings();
+            if (isStreaming && socket && socket.connected && currentLiveStreamTitle !== localDefaultStreamTitle) {
+                if (currentLiveStreamTitle === siteSettings?.liveStreamDefaultTitle) { 
+                    setCurrentLiveStreamTitle(localDefaultStreamTitle); 
+                    socket.emit('update-stream-title', { streamTitle: localDefaultStreamTitle });
+                }
+            }
+            if (isStreaming && socket && socket.connected && 
+                (localLiveStreamForLoggedInOnly !== siteSettings?.liveStreamForLoggedInUsersOnly || 
+                 settingsToUpdate.liveStreamAuthorizedUserId !== siteSettings?.liveStreamAuthorizedUserId)) {
+                socket.emit('register-broadcaster', {
+                    streamTitle: currentLiveStreamTitle,
+                    authorizedUserId: settingsToUpdate.liveStreamAuthorizedUserId,
+                    forLoggedInUsersOnly: settingsToUpdate.liveStreamForLoggedInUsersOnly
+                });
+                 if (settingsToUpdate.liveStreamForLoggedInUsersOnly) {
+                    toast({ title: t('adminLivestream.toast.settingsSavedTitle'), description: t('adminLivestream.toast.loggedInOnlyStreamInfo')});
+                } else if (settingsToUpdate.liveStreamAuthorizedUserId && authorizedUserForStream) {
+                    toast({ title: t('adminLivestream.toast.settingsSavedTitle'), description: t('adminLivestream.toast.privateStreamInfo', {userName: authorizedUserForStream.email})});
+                } else {
+                    toast({ title: t('adminLivestream.toast.settingsSavedTitle'), description: t('adminLivestream.toast.publicStreamInfo')});
+                }
+            }
+        } else {
+            toast({ 
+                title: t('adminLivestream.toast.errorTitle'), 
+                description: result.message || t('adminLivestream.toast.genericError'), 
+                variant: "destructive" 
+            });
+        }
+    } catch (error) {
+        toast({ 
+            title: t('adminLivestream.toast.errorTitle'), 
+            description: t('adminLivestream.toast.genericError'), 
+            variant: "destructive" 
+        });
+    } finally {
+        setIsSubmittingSettings(false);
     }
-    setIsSubmitting(false);
   };
 
   const toggleMicrophone = () => {
@@ -290,6 +372,23 @@ export default function LiveStreamAdminPage() {
       });
     }
   };
+  
+  const streamAccessStatus = () => {
+    if (isLoadingSettings || isLoadingAuthorizedUser) {
+      return <Loader2 className="h-4 w-4 animate-spin" />;
+    }
+    if (siteSettings?.liveStreamForLoggedInUsersOnly) {
+      return <span className="text-blue-400 flex items-center"><Eye className="mr-1.5 h-4 w-4" /> {t('adminLivestream.toast.loggedInOnlyStreamInfo')}</span>;
+    }
+    if (siteSettings?.liveStreamAuthorizedUserId && authorizedUserForStream) {
+      return <span className="text-orange-400 flex items-center"><UserCheck className="mr-1.5 h-4 w-4" /> {t('adminLivestream.configCard.authorizedUserLabel')} {authorizedUserForStream.email}</span>;
+    }
+    if (siteSettings?.liveStreamAuthorizedUserId && !authorizedUserForStream) {
+      return <span className="text-red-500 flex items-center"><ShieldAlert className="mr-1.5 h-4 w-4" /> {t('adminLivestream.configCard.noUserAuthorized')}</span>;
+    }
+    return <span className="text-green-400 flex items-center"><CheckCircle className="mr-1.5 h-4 w-4" /> {t('adminLivestream.toast.publicStreamInfo')}</span>;
+  };
+
 
   if (isLoadingSettings) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -306,7 +405,10 @@ export default function LiveStreamAdminPage() {
       <Card className="shadow-xl border-primary/20">
         <CardHeader>
           <CardTitle className="font-headline text-2xl">{t('adminLivestream.configCard.title')}</CardTitle>
-          <CardDescription>{t('adminLivestream.configCard.description')}</CardDescription>
+          <CardDescription>
+            {t('adminLivestream.configCard.description')}{' '}
+            <span className="block mt-1 text-xs">{streamAccessStatus()}</span>
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Video Player and Overlays Section */}
@@ -334,7 +436,7 @@ export default function LiveStreamAdminPage() {
 
             {(!isStreaming || !localStream) && hasCameraPermission !== false && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 rounded-md pointer-events-none">
-                  <VideoIcon className="h-12 w-12 text-muted-foreground/50 mb-2" />
+                  <VideoIconLucideSvg className="h-12 w-12 text-muted-foreground/50 mb-2" />
                   <p className="text-md text-muted-foreground text-center px-4">
                      {t('adminLivestream.configCard.cameraNotDetectedAlert.description')}
                   </p>
@@ -402,11 +504,35 @@ export default function LiveStreamAdminPage() {
               />
               <p className="text-xs text-muted-foreground">{t('adminLivestream.configCard.offlineMessageHelpText')}</p>
             </div>
+
+            <div className="flex items-center space-x-2 pt-2">
+              <Switch
+                id="liveStreamForLoggedInUsersOnly"
+                checked={localLiveStreamForLoggedInOnly}
+                onCheckedChange={setLocalLiveStreamForLoggedInOnly}
+                disabled={isSubmittingSettings}
+              />
+              <Label htmlFor="liveStreamForLoggedInUsersOnly" className="text-sm font-medium">
+                {t('adminLiveStreamPage.loggedInUsersOnly')}
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t('adminLiveStreamPage.loggedInUsersOnlyDescription')}
+            </p>
+            {localLiveStreamForLoggedInOnly && siteSettings?.liveStreamAuthorizedUserId && (
+                <Alert variant="default" className="mt-2 text-sm">
+                    <UserCheck className="h-4 w-4" />
+                    <AlertDescription>
+                        {t('adminLivestream.toast.loggedInOnlyClearsSpecificUser')}
+                    </AlertDescription>
+                </Alert>
+            )}
+
           </div>
         </CardContent>
         <CardFooter className="border-t pt-6 flex justify-end">
-          <Button onClick={handleSaveChanges} disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          <Button onClick={handleSaveChanges} disabled={isSubmittingSettings}>
+            {isSubmittingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             {t('adminLivestream.configCard.saveSettingsButton')}
           </Button>
         </CardFooter>
@@ -414,4 +540,5 @@ export default function LiveStreamAdminPage() {
     </div>
   );
 }
+
     

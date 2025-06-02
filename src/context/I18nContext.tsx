@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import enTranslations from '@/locales/en.json';
 import esTranslations from '@/locales/es.json';
-import { getSiteSettings } from '@/lib/actions';
+// Removed: import { getSiteSettings } from '@/lib/actions';
 import type { SiteSettings, ActiveCurrencySetting, ColorSetting } from '@/lib/types';
 import { defaultThemeColorsHex } from '@/lib/config';
 
@@ -17,8 +17,8 @@ interface I18nContextType {
   siteSettings: SiteSettings | null;
   isLoadingSettings: boolean;
   currentSiteTitle: string;
-  currentSiteIconUrl?: string; // General site icon for favicon
-  currentHeaderIconUrl?: string; // Specific icon for header/sidebar logo
+  currentSiteIconUrl?: string;
+  currentHeaderIconUrl?: string;
   refreshSiteSettings: () => Promise<void>;
   displayCurrency: ActiveCurrencySetting | null;
   setDisplayCurrency: (currency: ActiveCurrencySetting) => void;
@@ -46,7 +46,28 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
   const fetchAllSettings = useCallback(async () => {
     setIsLoadingSettings(true);
     try {
-      const settings = await getSiteSettings();
+      const response = await fetch('/api/site-settings');
+      if (!response.ok) {
+        let errorBodyMessage = "Could not read error body.";
+        try {
+          // Attempt to parse as JSON first, as our API routes should return JSON errors
+          const jsonError = await response.json();
+          errorBodyMessage = jsonError.message || JSON.stringify(jsonError);
+        } catch (e) {
+          // If JSON parsing fails, try to read as text
+          try {
+            errorBodyMessage = await response.text();
+          } catch (textError) {
+            // If text reading also fails, keep the default message
+          }
+        }
+        // Truncate long error bodies
+        if (errorBodyMessage.length > 200) {
+            errorBodyMessage = errorBodyMessage.substring(0, 200) + "...";
+        }
+        throw new Error(`Failed to fetch site settings. Status: ${response.status}, StatusText: ${response.statusText || 'N/A'}, Body: ${errorBodyMessage}`);
+      }
+      const settings: SiteSettings = await response.json();
       setSiteSettings(settings);
 
       let initialLang = settings.defaultLanguage;
@@ -82,7 +103,7 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
       setDisplayCurrencyState(initialCurrency);
 
     } catch (error) {
-      console.error("Failed to fetch site settings:", error);
+      console.error("Failed to fetch site settings via API:", error);
       const defaultSettingsFallback: SiteSettings = {
         siteTitle: 'Aurum Media (Error)',
         siteIconUrl: '',
@@ -110,6 +131,17 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
         headerDisplayMode: 'both',
         footerDisplayMode: 'logo',
         footerLogoSize: 64,
+        heroTagline: '',
+        heroTaglineColor: '#FFFFFF',
+        heroTaglineSize: 'md',
+        testimonialMediaOptions: 'both',
+        testimonialEditGracePeriodMinutes: 60,
+        mobileAppsSectionTitle: "Nuestras Apps",
+        showMobileAppsSection: false,
+        showAndroidApp: false,
+        androidAppLink: "",
+        showIosApp: false,
+        iosAppLink: "",
       };
       setSiteSettings(defaultSettingsFallback);
       setLanguageState('es');
@@ -157,7 +189,7 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
       translation = getNestedValue(translationsMap.es, key);
       if (translation === undefined) {
          console.error(`Fallback translation not found for key: "${key}" in Spanish.`);
-         return `{${key}}`; 
+         return `{${key}}`;
       }
     }
     if (replacements && typeof translation === 'string') {
@@ -169,7 +201,7 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
   };
 
   if (!isInitialized) {
-    return null; 
+    return null;
   }
 
   const currentHeaderIconUrl = siteSettings?.headerIconUrl || siteSettings?.siteIconUrl;
@@ -200,3 +232,4 @@ export const useTranslation = () => {
   }
   return context;
 };
+

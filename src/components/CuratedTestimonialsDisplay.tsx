@@ -6,14 +6,15 @@ import type { CuratedTestimonial, Testimonial, SiteSettings } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Star, Quote, Loader2, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import { getTestimonials } from '@/lib/actions';
-import { curateTestimonials, CurateTestimonialsInput } from '@/ai/flows/curate-testimonials';
+// Removed: import { getTestimonials } from '@/lib/actions';
+// Removed: import { curateTestimonials, CurateTestimonialsInput } from '@/ai/flows/curate-testimonials';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
 import TestimonialDetailModal from './TestimonialDetailModal';
 import { cn } from '@/lib/utils';
+import type { CurateTestimonialsInput, CurateTestimonialsOutput } from '@/ai/flows/curate-testimonials';
 
-const ROTATION_INTERVAL = 4000; // 4 seconds
+const ROTATION_INTERVAL = 4000;
 
 export default function CuratedTestimonialsDisplay() {
   const [allCuratedTestimonials, setAllCuratedTestimonials] = useState<CuratedTestimonial[]>([]);
@@ -31,7 +32,9 @@ export default function CuratedTestimonialsDisplay() {
 
     setIsLoading(true);
     try {
-      const approvedTestimonials = await getTestimonials('approved');
+      const response = await fetch('/api/testimonials?status=approved');
+      if (!response.ok) throw new Error('Failed to fetch approved testimonials');
+      const approvedTestimonials: Testimonial[] = await response.json();
 
       if (approvedTestimonials.length === 0) {
         setAllCuratedTestimonials([]);
@@ -48,7 +51,19 @@ export default function CuratedTestimonialsDisplay() {
           author: item.author,
           date: item.date,
         }));
-        const curatedOutput = await curateTestimonials(inputForAI);
+
+        const aiResponse = await fetch('/api/ai/curate-testimonials', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(inputForAI),
+        });
+
+        if (!aiResponse.ok) {
+            console.error("AI Curation API error:", await aiResponse.text());
+            throw new Error('AI Curation API request failed');
+        }
+        const curatedOutput: CurateTestimonialsOutput = await aiResponse.json();
+
 
         const curatedMap = new Map(curatedOutput.map(item => [item.id, item.reason]));
         let enrichedTestimonials = approvedTestimonials
@@ -61,8 +76,6 @@ export default function CuratedTestimonialsDisplay() {
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-        // If AI curation is enabled but returns empty (or fewer than expected), 
-        // fall back to showing all approved if the IA-returned list is empty but approved testimonials exist
         if (enrichedTestimonials.length === 0 && approvedTestimonials.length > 0) {
           enrichedTestimonials = approvedTestimonials
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -70,7 +83,6 @@ export default function CuratedTestimonialsDisplay() {
         }
         setAllCuratedTestimonials(enrichedTestimonials);
       } else {
-        // Fallback: AI not enabled or not enough testimonials. Show ALL approved.
         const recentTestimonials = approvedTestimonials
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
           .map(item => ({ ...item, photoUrls: item.photoUrls || [], videoUrls: item.videoUrls || [], reason: t('curatedTestimonials.recentTestimonialReason') }));
@@ -89,9 +101,10 @@ export default function CuratedTestimonialsDisplay() {
         description: t('curatedTestimonials.toast.loadErrorDescription'),
         variant: "destructive"
       });
-      // Fallback to showing all approved testimonials directly if AI curation fails critically
       try {
-        const approved = await getTestimonials('approved');
+        const approvedResponse = await fetch('/api/testimonials?status=approved');
+        if (!approvedResponse.ok) throw new Error('Failed to fetch fallback approved testimonials');
+        const approved: Testimonial[] = await approvedResponse.json();
         setAllCuratedTestimonials(
           approved
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -108,7 +121,7 @@ export default function CuratedTestimonialsDisplay() {
       }
     } finally {
       setIsLoading(false);
-      setCurrentIndex(0); 
+      setCurrentIndex(0);
     }
   }, [isLoadingSettings, siteSettings, t, toast]);
 
@@ -153,13 +166,12 @@ export default function CuratedTestimonialsDisplay() {
     setSelectedTestimonial(testimonial);
     setIsDetailModalOpen(true);
   };
-  
+
   const handleDotClick = (index: number) => {
     if (allCuratedTestimonials.length <= 3) {
       setCurrentIndex(index);
       resetInterval();
     }
-    // If more than 3 testimonials, dots are not directly clickable to jump, only indicate progress.
   };
 
   const currentDisplayedTestimonial = allCuratedTestimonials[currentIndex];
@@ -183,7 +195,6 @@ export default function CuratedTestimonialsDisplay() {
   if (numTotalTestimonials <= 3) {
     activeDotIndex = currentIndex;
   } else {
-    // Distribute currentIndex among 3 dots for > 3 items
     const third = numTotalTestimonials / 3;
     if (currentIndex < Math.floor(third)) {
       activeDotIndex = 0;
@@ -259,7 +270,7 @@ export default function CuratedTestimonialsDisplay() {
           </>
         )}
       </div>
-      
+
       {numTotalTestimonials > 1 && (
          <div className="flex justify-center mt-4 space-x-2">
           {[...Array(numDotsToShow)].map((_, index) => (
@@ -269,10 +280,10 @@ export default function CuratedTestimonialsDisplay() {
               className={cn(
                 "h-2 w-2 rounded-full transition-colors",
                 activeDotIndex === index ? "bg-primary" : "bg-muted hover:bg-muted-foreground/50",
-                numTotalTestimonials > 3 ? "cursor-default" : "cursor-pointer" // Make dots non-clickable if > 3 items
+                numTotalTestimonials > 3 ? "cursor-default" : "cursor-pointer"
               )}
               aria-label={numTotalTestimonials <=3 ? `Go to testimonial ${index + 1}` : `Page indicator ${index + 1} of ${numDotsToShow}`}
-              disabled={numTotalTestimonials > 3} // Disable click for > 3 items
+              disabled={numTotalTestimonials > 3}
             />
           ))}
         </div>
@@ -289,3 +300,4 @@ export default function CuratedTestimonialsDisplay() {
   );
 }
 
+    

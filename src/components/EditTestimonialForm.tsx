@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
-import { updateUserOwnTestimonial } from '@/lib/actions';
+// import { updateUserOwnTestimonial } from '@/lib/actions'; // Removed direct import
 import type { Testimonial, SiteSettings, TestimonialMediaOption } from '@/lib/types';
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
@@ -64,13 +64,22 @@ export default function EditTestimonialForm({ testimonial, onSuccessfulEdit, sit
   async function onSubmit(data: EditTestimonialFormValues) {
     setIsSubmitting(true);
     try {
-      const result = await updateUserOwnTestimonial(testimonial.id, testimonial.userId, {
+      const payload = {
         text: data.text,
         photoUrlsInput: (effectiveMediaOptions === 'photos' || effectiveMediaOptions === 'both') ? data.photoUrlsInput : undefined,
         videoUrlsInput: (effectiveMediaOptions === 'videos' || effectiveMediaOptions === 'both') ? data.videoUrlsInput : undefined,
+        userId: testimonial.userId, // Important for authorization on the backend
+      };
+
+      const response = await fetch(`/api/testimonials/${testimonial.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
-      if (result.success) {
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         toast({
           title: t('editTestimonialModal.toast.successTitle'),
           description: t('editTestimonialModal.toast.successDescription'),

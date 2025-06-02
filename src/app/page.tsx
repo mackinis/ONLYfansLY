@@ -4,18 +4,17 @@
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import VideoCard from '@/components/VideoCard';
-import type { Video, SiteSettings, ActiveCurrencySetting, ExchangeRates, Announcement, HeroTaglineSize } from '@/lib/types';
+import type { Video, SiteSettings, ActiveCurrencySetting, ExchangeRates, Announcement, HeroTaglineSize, SessionUserProfile } from '@/lib/types';
 import CuratedTestimonialsDisplay from '@/components/CuratedTestimonialsDisplay';
 import VideoPlayerModal from '@/components/VideoPlayerModal';
 import AnnouncementModal from '@/components/AnnouncementModal';
 import CourseDetailModal from '@/components/CourseDetailModal';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, Loader2, Video as VideoIconLucide, AlertTriangle } from 'lucide-react';
+import { PlayCircle, Loader2, Video as VideoIconLucideSvg, AlertTriangle } from 'lucide-react'; // Renamed VideoIcon
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useTranslation } from '@/context/I18nContext';
-import { getVideoCourses, getAnnouncements, incrementVideoCourseViews } from '@/lib/actions';
 import { cn } from '@/lib/utils';
 
 const PC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -33,6 +32,8 @@ export default function HomePage() {
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const [broadcasterId, setBroadcasterId] = useState<string | null>(null);
   const [webRtcError, setWebRtcError] = useState<string | null>(null);
+  const [loggedInUserId, setLoggedInUserId] = useState<string | null>(null);
+
 
   const [videoCourses, setVideoCourses] = useState<Video[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
@@ -53,6 +54,21 @@ export default function HomePage() {
   const siteLiveStreamOfflineMessage = siteSettings?.liveStreamOfflineMessage;
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedUserProfileString = sessionStorage.getItem('aurum_user_profile');
+      if (storedUserProfileString) {
+        try {
+          const userProfile: SessionUserProfile = JSON.parse(storedUserProfileString);
+          setLoggedInUserId(userProfile.id);
+        } catch (e) {
+          console.error("Failed to parse user profile for stream auth:", e);
+        }
+      }
+    }
+  }, []);
+
+
+  useEffect(() => {
     if (siteSettings) {
       setCurrentExchangeRates(siteSettings.exchangeRates); 
       setStreamTitleToDisplay(siteLiveStreamDefaultTitle || t('homepage.live.defaultTitle'));
@@ -64,7 +80,11 @@ export default function HomePage() {
     const fetchCourses = async () => {
       setIsLoadingCourses(true);
       try {
-        const courses = await getVideoCourses();
+        const response = await fetch('/api/video-courses');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch video courses: ${response.statusText}`);
+        }
+        const courses: Video[] = await response.json();
         setVideoCourses(courses);
       } catch (error) {
         console.error("Failed to fetch video courses:", error);
@@ -79,7 +99,12 @@ export default function HomePage() {
     if (isLoadingSiteSettings) return;
     setIsLoadingAnnouncement(true);
     try {
-      const allAnnouncements = await getAnnouncements({ activeOnly: true, nonExpiredOnly: true });
+      const response = await fetch('/api/announcements?activeOnly=true&nonExpiredOnly=true');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch announcements: ${response.statusText}`);
+      }
+      const allAnnouncements: Announcement[] = await response.json();
+      
       let announcementToShow: Announcement | null = null;
 
       for (const ann of allAnnouncements) {
@@ -118,9 +143,15 @@ export default function HomePage() {
   const handleOpenVideoPlayer = (video: Video) => {
     setSelectedVideoForPlayer(video);
     setIsVideoPlayerModalOpen(true);
-    incrementVideoCourseViews(video.id).catch(err => {
-        console.error("Failed to increment views for video:", video.id, err);
-    });
+    fetch(`/api/video-courses/${video.id}/increment-view`, { method: 'POST' })
+      .then(response => {
+        if (!response.ok) {
+          console.error("Failed to increment views for video:", video.id, response.statusText);
+        }
+      })
+      .catch(err => {
+          console.error("Error incrementing views for video:", video.id, err);
+      });
   };
 
   const handleOpenCourseDetail = (video: Video) => {
@@ -139,7 +170,7 @@ export default function HomePage() {
 
     newSocket.on('connect', () => {
       console.log('Visitor connected to Socket.IO server', newSocket.id);
-      newSocket.emit('register-viewer');
+      newSocket.emit('register-viewer', { userId: loggedInUserId }); // Send userId if available
     });
 
     newSocket.on('broadcaster-ready', (data: { broadcasterId: string, streamTitle?: string }) => {
@@ -225,7 +256,7 @@ export default function HomePage() {
       setSocket(null); setReceivedRemoteStream(null); setIsStreamLive(false);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteSettings, siteLiveStreamDefaultTitle, t, broadcasterId]);
+  }, [siteSettings, siteLiveStreamDefaultTitle, t, broadcasterId, loggedInUserId]); // Added loggedInUserId to dependencies
 
   useEffect(() => {
     if (receivedRemoteStream && remoteVideoRef.current) {
@@ -295,7 +326,7 @@ export default function HomePage() {
               <video ref={remoteVideoRef} className="w-full aspect-video rounded-md bg-black" playsInline controls />
               {(!isStreamLive || !receivedRemoteStream) && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 rounded-md pointer-events-none">
-                  <VideoIconLucide className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                  <VideoIconLucideSvg className="h-16 w-16 text-muted-foreground/50 mb-4" />
                   <p className="text-xl text-muted-foreground">
                      {socket && socket.connected && !broadcasterId && !isStreamLive ?
                       t('homepage.live.statusOffline') :

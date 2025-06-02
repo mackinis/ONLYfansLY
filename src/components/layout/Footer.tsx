@@ -6,7 +6,7 @@ import { useState } from 'react';
 import TestimonialModal from '@/components/TestimonialModal';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { Film, Facebook, Instagram, Twitter, Youtube, Linkedin, MessageCircle, Link2, Music2 } from 'lucide-react';
+import { Film, Facebook, Instagram, Twitter, Youtube, Linkedin, MessageCircle, Link2, Music2, Smartphone, Apple as AppleIcon } from 'lucide-react';
 import { useTranslation } from '@/context/I18nContext';
 import type { SocialLink, FooterDisplayMode } from '@/lib/types';
 import React from 'react';
@@ -33,7 +33,17 @@ export default function Footer() {
 
   const socialLinks = siteSettings?.socialLinks || [];
   const footerDisplayMode = siteSettings?.footerDisplayMode || 'logo';
-  const footerLogoSize = siteSettings?.footerLogoSize || 64; // Default to 64px if not set
+  const footerLogoSize = siteSettings?.footerLogoSize || 64; 
+
+  const mobileAppsSectionTitle = siteSettings?.mobileAppsSectionTitle || t('footer.mobileAppsSectionTitle', { defaultValue: "Our Apps" });
+  const showMobileAppsSection = siteSettings?.showMobileAppsSection || false;
+  const showAndroidApp = siteSettings?.showAndroidApp || false;
+  const androidAppLink = siteSettings?.androidAppLink || "";
+  const androidAppIconUrl = siteSettings?.androidAppIconUrl || "";
+  const showIosApp = siteSettings?.showIosApp || false;
+  const iosAppLink = siteSettings?.iosAppLink || "";
+  const iosAppIconUrl = siteSettings?.iosAppIconUrl || "";
+
 
   const renderFooterBrand = () => {
     const showLogo = footerDisplayMode === 'logo' || footerDisplayMode === 'both';
@@ -42,7 +52,7 @@ export default function Footer() {
     return (
       <div className={cn(
         "flex items-center",
-        footerDisplayMode === 'both' ? "flex-col space-y-2" : "justify-center" // Centered horizontally always if 'both'
+        footerDisplayMode === 'both' ? "flex-col space-y-2" : "justify-center" 
       )}>
         {showLogo && (
           <Link href="/" aria-label={currentSiteTitle || t('header.title')}>
@@ -57,8 +67,8 @@ export default function Footer() {
           <Link href="/" aria-label={currentSiteTitle || t('header.title')}>
             <span className={cn(
               "font-headline text-primary",
-              footerDisplayMode === 'both' ? "text-lg mt-1" : "text-xl", // Slightly smaller if below logo
-              !showLogo && "text-2xl" // Larger if only title
+              footerDisplayMode === 'both' ? "text-lg mt-1" : "text-xl", 
+              !showLogo && "text-2xl" 
             )}>
               {currentSiteTitle || t('header.title')}
             </span>
@@ -72,16 +82,16 @@ export default function Footer() {
     <>
       <footer className="bg-card text-card-foreground border-t border-border/40 mt-auto">
         <div className="container py-12 px-4 md:px-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
-            {/* Column 1: Brand */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
+            
             <div className={cn(
-              "flex", 
-              footerDisplayMode === 'both' || footerDisplayMode === 'title' || footerDisplayMode === 'logo' ? "items-center justify-center" : "md:justify-start items-center"
+              "flex md:items-start", 
+              footerDisplayMode === 'both' || footerDisplayMode === 'title' || footerDisplayMode === 'logo' ? "items-center justify-center md:justify-start" : "md:justify-start items-center justify-center"
             )}>
               {renderFooterBrand()}
             </div>
 
-            {/* Column 2: Quick Links */}
+            
             <div>
               <h3 className="font-headline text-lg font-semibold mb-4 text-primary">{t('footer.quickLinks')}</h3>
               <ul className="space-y-2 text-sm">
@@ -91,7 +101,7 @@ export default function Footer() {
               </ul>
             </div>
 
-            {/* Column 3: Testimonials */}
+            
             <div className="space-y-4">
               <h3 className="font-headline text-lg font-semibold text-primary">{t('footer.testimonialsTitle')}</h3>
               <Button variant="outline" onClick={() => setIsTestimonialModalOpen(true)}>
@@ -99,7 +109,7 @@ export default function Footer() {
               </Button>
             </div>
             
-            {/* Column 4: Follow Us */}
+            
             <div>
               <h3 className="font-headline text-lg font-semibold mb-4 text-primary">{t('footer.followUs')}</h3>
               {socialLinks.length > 0 ? (
@@ -120,6 +130,34 @@ export default function Footer() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">{t('footer.noSocialLinks')}</p>
+              )}
+
+              {showMobileAppsSection && (showAndroidApp || showIosApp) && (
+                <div className="mt-6">
+                  <h3 className="font-headline text-lg font-semibold mb-3 text-primary">
+                    {mobileAppsSectionTitle}
+                  </h3>
+                  <div className="flex space-x-3">
+                    {showAndroidApp && androidAppLink && (
+                      <Link href={androidAppLink} target="_blank" rel="noopener noreferrer" aria-label={t('footer.downloadAndroidApp', {defaultValue: 'Download Android App'})}>
+                        {androidAppIconUrl ? (
+                          <Image src={androidAppIconUrl} alt={t('footer.androidAppIconAlt', {defaultValue: 'Android App Icon'})} width={32} height={32} className="h-8 w-8 rounded-md object-contain" data-ai-hint="android playstore" />
+                        ) : (
+                          <Smartphone className="h-8 w-8 text-muted-foreground hover:text-primary transition-colors" />
+                        )}
+                      </Link>
+                    )}
+                    {showIosApp && iosAppLink && (
+                      <Link href={iosAppLink} target="_blank" rel="noopener noreferrer" aria-label={t('footer.downloadIosApp', {defaultValue: 'Download iOS App'})}>
+                        {iosAppIconUrl ? (
+                           <Image src={iosAppIconUrl} alt={t('footer.iosAppIconAlt', {defaultValue: 'iOS App Icon'})} width={32} height={32} className="h-8 w-8 rounded-md object-contain" data-ai-hint="ios appstore" />
+                        ) : (
+                          <AppleIcon className="h-8 w-8 text-muted-foreground hover:text-primary transition-colors" />
+                        )}
+                      </Link>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>

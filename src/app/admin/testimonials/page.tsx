@@ -3,8 +3,9 @@
 
 import { useEffect, useState } from 'react';
 import type { Testimonial, CuratedTestimonial } from '@/lib/types';
-import { getTestimonials, updateTestimonialStatus, deleteTestimonialById } from '@/lib/actions';
-import { curateTestimonials, CurateTestimonialsInput } from '@/ai/flows/curate-testimonials';
+// Removed direct import of getTestimonials, updateTestimonialStatus, deleteTestimonialById
+// Removed direct import of curateTestimonials function
+import type { CurateTestimonialsInput, CurateTestimonialsOutput } from '@/ai/flows/curate-testimonials';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -45,11 +46,18 @@ export default function TestimonialsAdminPage() {
   const fetchAllTestimonials = async () => {
     setIsLoading(true);
     try {
-      const [pending, approved, denied] = await Promise.all([
-        getTestimonials('pending'),
-        getTestimonials('approved'),
-        getTestimonials('denied'),
+      const [pendingRes, approvedRes, deniedRes] = await Promise.all([
+        fetch('/api/testimonials?status=pending'),
+        fetch('/api/testimonials?status=approved'),
+        fetch('/api/testimonials?status=denied'),
       ]);
+      if (!pendingRes.ok || !approvedRes.ok || !deniedRes.ok) {
+        throw new Error('Failed to fetch one or more testimonial lists');
+      }
+      const pending = await pendingRes.json();
+      const approved = await approvedRes.json();
+      const denied = await deniedRes.json();
+      
       setPendingTestimonials(pending);
       setApprovedTestimonials(approved);
       setDeniedTestimonials(denied);
@@ -72,7 +80,20 @@ export default function TestimonialsAdminPage() {
 
   const handleStatusUpdate = async (id: string, status: Testimonial['status']) => {
     try {
-      await updateTestimonialStatus(id, status);
+      // This assumes an API route for updating status exists or will be created
+      // For now, we'll assume it would be /api/admin/testimonials/[id]/status
+      // For simplicity, using the existing `updateTestimonialStatusLogic` via a hypothetical general testimonial update route
+      const response = await fetch(`/api/testimonials/${id}/status`, { // Placeholder, needs specific API route
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to update status');
+      }
+
       toast({ title: t('adminTestimonialsPage.toasts.updateSuccessTitle'), description: t('adminTestimonialsPage.toasts.updateSuccessDescription', { status }) });
       fetchAllTestimonials(); 
       if (status === 'approved' || status === 'denied') { 
@@ -85,8 +106,10 @@ export default function TestimonialsAdminPage() {
   
   const handleDeleteTestimonial = async (testimonialId: string) => {
     try {
-      const result = await deleteTestimonialById(testimonialId);
-      if (result.success) {
+      const response = await fetch(`/api/testimonials/${testimonialId}`, { method: 'DELETE' });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         toast({ title: t('adminTestimonialsPage.toasts.deleteSuccessTitle'), description: result.message });
         fetchAllTestimonials();
         setCuratedDisplayTestimonials([]); 
@@ -137,7 +160,19 @@ export default function TestimonialsAdminPage() {
         author: item.author,
         date: item.date, 
       }));
-      const curatedOutput = await curateTestimonials(inputForAI);
+      
+      const response = await fetch('/api/ai/curate-testimonials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(inputForAI),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to parse AI error response' }));
+        throw new Error(errorData.message || `AI Curation API request failed with status ${response.status}`);
+      }
+
+      const curatedOutput: CurateTestimonialsOutput = await response.json();
       
       const curatedMap = new Map(curatedOutput.map(item => [item.id, item.reason]));
       const enrichedTestimonials = approvedTestimonials
@@ -398,3 +433,4 @@ export default function TestimonialsAdminPage() {
     </div>
   );
 }
+    

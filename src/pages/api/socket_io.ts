@@ -14,7 +14,10 @@ interface NextApiResponseWithSocket extends NextApiResponse {
 }
 
 let broadcasterSocketId: string | null = null;
-let currentStreamTitle: string | null = null; // Store current stream title
+let currentStreamTitle: string | null = null;
+let currentAuthorizedUserIdForStream: string | null = null;
+let currentStreamForLoggedInUsersOnly: boolean = false; // New state for "logged-in users only"
+
 const viewers = new Map<string, ServerSocket>(); // Store viewer sockets <socket.id, socket>
 
 export const config = {
@@ -42,9 +45,10 @@ export default function SocketHandler(req: NextApiRequest, res: NextApiResponseW
         console.log('Socket disconnected:', socket.id);
         if (socket.id === broadcasterSocketId) {
           broadcasterSocketId = null;
-          currentStreamTitle = null; // Clear title
+          currentStreamTitle = null; 
+          currentAuthorizedUserIdForStream = null;
+          currentStreamForLoggedInUsersOnly = false; // Reset this too
           viewers.forEach(viewerSocket => viewerSocket.emit('broadcaster-disconnected'));
-          // viewers.clear(); // Clearing viewers map here might be too aggressive if they should persist for a bit
           console.log('Broadcaster disconnected and viewers notified.');
         } else {
           viewers.delete(socket.id);
@@ -56,15 +60,33 @@ export default function SocketHandler(req: NextApiRequest, res: NextApiResponseW
       });
 
       // Broadcaster events
-      socket.on('register-broadcaster', (data?: { streamTitle?: string }) => {
+      socket.on('register-broadcaster', (data?: { streamTitle?: string; authorizedUserId?: string | null; forLoggedInUsersOnly?: boolean }) => {
         broadcasterSocketId = socket.id;
         currentStreamTitle = data?.streamTitle || 'Live Stream';
-        console.log('Broadcaster registered:', socket.id, 'Title:', currentStreamTitle);
+        currentAuthorizedUserIdForStream = data?.authorizedUserId || null;
+        currentStreamForLoggedInUsersOnly = data?.forLoggedInUsersOnly || false;
+        console.log('Broadcaster registered:', socket.id, 'Title:', currentStreamTitle, 'Auth User ID:', currentAuthorizedUserIdForStream || 'N/A', 'Logged In Only:', currentStreamForLoggedInUsersOnly);
+        
         viewers.forEach(viewerSocket => {
-          viewerSocket.emit('broadcaster-ready', { broadcasterId: socket.id, streamTitle: currentStreamTitle });
-          if(broadcasterSocketId) { // ensure broadcasterSocketId is not null
-            io.to(broadcasterSocketId).emit('new-viewer', { viewerId: viewerSocket.id });
-          }
+            const viewerData = viewerSocket.data as { userId?: string };
+            let canView = false;
+
+            if (currentStreamForLoggedInUsersOnly) {
+                canView = !!viewerData.userId; // Only logged-in users
+            } else if (currentAuthorizedUserIdForStream) {
+                canView = viewerData.userId === currentAuthorizedUserIdForStream; // Only the specific authorized user
+            } else {
+                canView = true; // Public stream
+            }
+
+            if (canView) {
+                 viewerSocket.emit('broadcaster-ready', { broadcasterId: socket.id, streamTitle: currentStreamTitle });
+                 if(broadcasterSocketId){
+                    io.to(broadcasterSocketId).emit('new-viewer', { viewerId: viewerSocket.id });
+                 }
+            } else {
+                viewerSocket.emit('broadcaster-disconnected'); // Simulate stream offline for unauthorized viewers
+            }
         });
       });
       
@@ -83,6 +105,8 @@ export default function SocketHandler(req: NextApiRequest, res: NextApiResponseW
           console.log('Broadcaster explicitly stopped stream:', socket.id);
           broadcasterSocketId = null;
           currentStreamTitle = null;
+          currentAuthorizedUserIdForStream = null;
+          currentStreamForLoggedInUsersOnly = false;
           viewers.forEach(viewerSocket => viewerSocket.emit('broadcaster-disconnected'));
         }
       });
@@ -106,13 +130,33 @@ export default function SocketHandler(req: NextApiRequest, res: NextApiResponseW
       });
 
       // Viewer events
-      socket.on('register-viewer', () => {
+      socket.on('register-viewer', (payload?: { userId?: string }) => {
+        const viewerUserId = payload?.userId;
+        socket.data.userId = viewerUserId; 
+
         viewers.set(socket.id, socket);
-        console.log('Viewer registered:', socket.id, '. Total viewers:', viewers.size);
+        console.log('Viewer registered:', socket.id, 'User ID:', viewerUserId || 'Anonymous', '. Total viewers:', viewers.size);
+        
         if (broadcasterSocketId) {
-          console.log(`Notifying broadcaster ${broadcasterSocketId} about new viewer ${socket.id}`);
-          io.to(broadcasterSocketId).emit('new-viewer', { viewerId: socket.id });
-          socket.emit('broadcaster-ready', { broadcasterId: broadcasterSocketId, streamTitle: currentStreamTitle });
+            let canView = false;
+            if (currentStreamForLoggedInUsersOnly) {
+                canView = !!viewerUserId; // Only logged-in users
+                console.log(`Viewer ${socket.id} attempting to connect to 'logged-in only' stream. Logged in: ${canView}`);
+            } else if (currentAuthorizedUserIdForStream) {
+                canView = viewerUserId === currentAuthorizedUserIdForStream; // Only the specific authorized user
+                console.log(`Viewer ${socket.id} (User: ${viewerUserId || 'Anonymous'}) attempting to connect to private stream for user ${currentAuthorizedUserIdForStream}. Authorized: ${canView}`);
+            } else {
+                canView = true; // Public stream
+                console.log(`Viewer ${socket.id} connecting to public stream.`);
+            }
+
+            if (canView) {
+              socket.emit('broadcaster-ready', { broadcasterId: broadcasterSocketId, streamTitle: currentStreamTitle });
+              io.to(broadcasterSocketId).emit('new-viewer', { viewerId: socket.id });
+            } else {
+              socket.emit('broadcaster-disconnected'); // Make it appear as if no stream is available
+              console.log(`Viewer ${socket.id} (User: ${viewerUserId || 'Anonymous'}) access denied to stream.`);
+            }
         } else {
           socket.emit('broadcaster-disconnected');
           console.log(`Informing viewer ${socket.id} that broadcaster is disconnected.`);
@@ -144,3 +188,5 @@ export default function SocketHandler(req: NextApiRequest, res: NextApiResponseW
   }
   res.end();
 }
+
+    

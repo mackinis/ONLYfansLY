@@ -15,7 +15,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { PlusCircle, Edit, Trash2, Loader2, Video as VideoIcon, ArrowUp, ArrowDown, Save, Eye, Percent, Tag } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getVideoCourses, createVideoCourse, updateVideoCourse, deleteVideoCourse, updateVideoCoursesOrder } from '@/lib/actions';
+// Removed: import { getVideoCourses, createVideoCourse, updateVideoCourse, deleteVideoCourse, updateVideoCoursesOrder } from '@/lib/actions';
 import { useTranslation } from '@/context/I18nContext';
 import {
   AlertDialog,
@@ -28,18 +28,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { videoCourseSchema } from '@/lib/actions'; // Import schema
 
-const courseFormSchema = z.object({
-  title: z.string().min(3, { message: "Title must be at least 3 characters." }),
-  description: z.string().min(10, { message: "Description must be at least 10 characters." }),
-  previewImageUrl: z.string().url({ message: "Please enter a valid URL for the preview image." }).optional().or(z.literal('')),
-  videoUrl: z.string().url({ message: "Please enter a valid URL for the video." }),
-  priceArs: z.coerce.number().positive({ message: "Price must be a positive number." }),
-  discountInput: z.string().optional().or(z.literal('')),
-  duration: z.string().optional(),
-});
-
-type CourseFormValues = z.infer<typeof courseFormSchema>;
+type CourseFormValues = z.infer<typeof videoCourseSchema>;
 
 export default function AdminCoursesPage() {
   const { t, language } = useTranslation();
@@ -53,7 +44,7 @@ export default function AdminCoursesPage() {
   const { toast } = useToast();
 
   const form = useForm<CourseFormValues>({
-    resolver: zodResolver(courseFormSchema),
+    resolver: zodResolver(videoCourseSchema),
     defaultValues: {
       title: '',
       description: '',
@@ -68,7 +59,11 @@ export default function AdminCoursesPage() {
   const fetchCourses = async () => {
     setIsLoading(true);
     try {
-      const fetchedCourses = await getVideoCourses();
+      const response = await fetch('/api/video-courses');
+      if (!response.ok) {
+        throw new Error(t('adminCoursesPage.toasts.fetchErrorDescription'));
+      }
+      const fetchedCourses = await response.json();
       setCourses(fetchedCourses);
       setIsOrderChanged(false); 
     } catch (error) {
@@ -119,14 +114,23 @@ export default function AdminCoursesPage() {
   const onSubmit = async (data: CourseFormValues) => {
     setIsSubmitting(true);
     try {
-      let result;
+      let response;
       if (editingCourse) {
-        result = await updateVideoCourse(editingCourse.id, data);
+        response = await fetch(`/api/video-courses/${editingCourse.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
       } else {
-        result = await createVideoCourse(data);
+        response = await fetch('/api/video-courses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
       }
+      const result = await response.json();
 
-      if (result.success) {
+      if (response.ok && result.success) {
         toast({ title: editingCourse ? t('adminCoursesPage.toasts.updateSuccessTitle') : t('adminCoursesPage.toasts.createSuccessTitle'), description: result.message });
         handleCloseModal();
         fetchCourses();
@@ -149,8 +153,11 @@ export default function AdminCoursesPage() {
 
   const handleDeleteCourse = async (courseId: string) => {
     try {
-      const result = await deleteVideoCourse(courseId);
-      if (result.success) {
+      const response = await fetch(`/api/video-courses/${courseId}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (response.ok && result.success) {
         toast({ title: t('adminCoursesPage.toasts.deleteSuccessTitle'), description: result.message });
         fetchCourses();
       } else {
@@ -183,8 +190,13 @@ export default function AdminCoursesPage() {
       order: index + 1, 
     }));
     try {
-      const result = await updateVideoCoursesOrder(coursesToUpdate);
-      if (result.success) {
+      const response = await fetch('/api/video-courses/order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(coursesToUpdate),
+      });
+      const result = await response.json();
+      if (response.ok && result.success) {
         toast({ title: t('adminCoursesPage.toasts.orderUpdateSuccessTitle'), description: result.message });
         setIsOrderChanged(false);
       } else {
@@ -375,3 +387,5 @@ export default function AdminCoursesPage() {
     </div>
   );
 }
+
+    

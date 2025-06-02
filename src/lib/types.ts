@@ -118,9 +118,11 @@ export interface SiteSettings {
   heroTaglineSize?: HeroTaglineSize;
   liveStreamDefaultTitle: string;
   liveStreamOfflineMessage: string;
+  liveStreamAuthorizedUserId?: string | null;
+  liveStreamForLoggedInUsersOnly?: boolean; // New field
   socialLinks: SocialLink[];
-  testimonialMediaOptions: TestimonialMediaOption; // Made non-optional
-  testimonialEditGracePeriodMinutes: number; // Made non-optional
+  testimonialMediaOptions: TestimonialMediaOption;
+  testimonialEditGracePeriodMinutes: number; 
   updatedAt?: string;
   whatsAppEnabled: boolean;
   whatsAppPhoneNumber: string;
@@ -134,6 +136,15 @@ export interface SiteSettings {
   headerDisplayMode: HeaderDisplayMode;
   footerDisplayMode: FooterDisplayMode;
   footerLogoSize?: number;
+  // Mobile Apps Section
+  mobileAppsSectionTitle?: string;
+  showMobileAppsSection?: boolean;
+  showAndroidApp?: boolean;
+  androidAppLink?: string;
+  androidAppIconUrl?: string; 
+  showIosApp?: boolean;
+  iosAppLink?: string;
+  iosAppIconUrl?: string; 
 }
 
 export interface ThemeColorSetting { 
@@ -182,3 +193,5 @@ export interface UpdateUserOwnTestimonialData {
   photoUrlsInput?: string;
   videoUrlsInput?: string;
 }
+
+    

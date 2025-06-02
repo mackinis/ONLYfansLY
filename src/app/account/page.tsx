@@ -10,8 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, UserCircle, MessageSquareText, AlertTriangle, Edit as EditIcon, Clock } from 'lucide-react';
-import type { UserProfile, Testimonial, SessionUserProfile, SiteSettings } from '@/lib/types';
-import { getUserProfileById, getTestimonials, getSiteSettings } from '@/lib/actions';
+import type { UserProfile, Testimonial, SiteSettings } from '@/lib/types';
+// Removed: import { getUserProfileById, getTestimonials, getSiteSettings } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
 import Link from 'next/link';
@@ -21,7 +21,7 @@ import EditTestimonialModal from '@/components/EditTestimonialModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export default function AccountPage() {
-  const { t, language } = useTranslation();
+  const { t, language, siteSettings: globalSiteSettings, isLoadingSettings: isLoadingGlobalSettings } = useTranslation();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -30,28 +30,21 @@ export default function AccountPage() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isLoadingTestimonials, setIsLoadingTestimonials] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const [siteSettings, setSiteSettingsState] = useState<SiteSettings | null>(null);
-  const [isLoadingSiteSettings, setIsLoadingSiteSettings] = useState(true);
+  
+  // Use siteSettings from context, local state for this page's copy if needed for specific logic not affecting global
+  const [pageSpecificSiteSettings, setPageSpecificSiteSettings] = useState<SiteSettings | null>(null);
+  const [isLoadingPageSpecificSiteSettings, setIsLoadingPageSpecificSiteSettings] = useState(true);
+
 
   const [editingTestimonial, setEditingTestimonial] = useState<Testimonial | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const fetchSiteSettings = useCallback(async () => {
-    setIsLoadingSiteSettings(true);
-    try {
-      const settings = await getSiteSettings();
-      setSiteSettingsState(settings);
-    } catch (error) {
-      console.error("Failed to fetch site settings for account page:", error);
-      toast({ title: "Error", description: "Could not load site configuration.", variant: "destructive" });
-    } finally {
-      setIsLoadingSiteSettings(false);
-    }
-  }, [toast]);
-  
   useEffect(() => {
-    fetchSiteSettings();
-  }, [fetchSiteSettings]);
+    if (!isLoadingGlobalSettings && globalSiteSettings) {
+      setPageSpecificSiteSettings(globalSiteSettings);
+      setIsLoadingPageSpecificSiteSettings(false);
+    }
+  }, [globalSiteSettings, isLoadingGlobalSettings]);
 
 
   useEffect(() => {
@@ -76,21 +69,38 @@ export default function AccountPage() {
       setIsLoadingProfile(true);
       setIsLoadingTestimonials(true);
       try {
-        const profile = await getUserProfileById(userId);
+        const profileResponse = await fetch(`/api/users/${userId}`); // Corrected URL
+        if (!profileResponse.ok) {
+            // Try to parse error message from API response
+            const errorData = await profileResponse.json().catch(() => ({ message: t('accountPage.toasts.profileErrorDescription') }));
+            throw new Error(errorData.message || t('accountPage.toasts.profileErrorDescription'));
+        }
+        const profile = await profileResponse.json();
+        
         if (profile) {
           setUserProfile(profile);
         } else {
+          // This case might be redundant if !profileResponse.ok throws
           toast({ title: t('accountPage.toasts.profileErrorTitle'), description: t('accountPage.toasts.profileErrorDescription'), variant: 'destructive' });
           router.push('/login'); 
         }
       } catch (error) {
-        toast({ title: t('accountPage.toasts.profileErrorTitle'), description: t('accountPage.toasts.genericError'), variant: 'destructive' });
+        let errorMessage = t('accountPage.toasts.genericError');
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        toast({ title: t('accountPage.toasts.profileErrorTitle'), description: errorMessage, variant: 'destructive' });
       } finally {
         setIsLoadingProfile(false);
       }
 
       try {
-        const testimonials = await getTestimonials(undefined, userId); 
+        const testimonialsResponse = await fetch(`/api/testimonials?userId=${userId}`);
+        if (!testimonialsResponse.ok) {
+            const errorData = await testimonialsResponse.json().catch(() => ({}));
+            throw new Error(errorData.message || t('accountPage.toasts.genericError'));
+        }
+        const testimonials = await testimonialsResponse.json();
         setUserTestimonials(testimonials);
       } catch (error) {
         console.error("Error fetching testimonials for account page:", error);
@@ -102,8 +112,10 @@ export default function AccountPage() {
   }, [userId, toast, router, t]);
 
   useEffect(() => {
-    fetchUserAndTestimonials();
-  }, [fetchUserAndTestimonials]);
+    if (userId) { // Ensure userId is set before fetching
+        fetchUserAndTestimonials();
+    }
+  }, [userId, fetchUserAndTestimonials]);
 
 
   const handleEditTestimonial = (testimonial: Testimonial) => {
@@ -226,7 +238,7 @@ export default function AccountPage() {
                 <CardDescription>{t('accountPage.testimonialsSection.description')}</CardDescription>
               </CardHeader>
               <CardContent>
-                {isLoadingTestimonials || isLoadingSiteSettings ? (
+                {isLoadingTestimonials || isLoadingPageSpecificSiteSettings ? (
                   <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : userTestimonials.length > 0 ? (
                   <Table>
@@ -240,7 +252,7 @@ export default function AccountPage() {
                     </TableHeader>
                     <TableBody>
                       {userTestimonials.map((testimonial) => {
-                        const gracePeriodMinutes = siteSettings?.testimonialEditGracePeriodMinutes ?? 0;
+                        const gracePeriodMinutes = pageSpecificSiteSettings?.testimonialEditGracePeriodMinutes ?? 0;
                         const submissionDate = new Date(testimonial.date);
                         const gracePeriodEndDate = addMinutes(submissionDate, gracePeriodMinutes);
                         const isEditable = testimonial.status === 'pending' && isAfter(gracePeriodEndDate, new Date());
@@ -290,15 +302,19 @@ export default function AccountPage() {
         </div>
       </main>
       <Footer />
-      {editingTestimonial && siteSettings && (
+      {editingTestimonial && pageSpecificSiteSettings && (
         <EditTestimonialModal
             isOpen={isEditModalOpen}
             onOpenChange={setIsEditModalOpen}
             testimonial={editingTestimonial}
             onTestimonialUpdated={onTestimonialUpdated}
-            siteSettings={siteSettings}
+            siteSettings={pageSpecificSiteSettings}
         />
       )}
     </div>
   );
 }
+
+    
+
+    
