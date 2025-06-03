@@ -157,7 +157,8 @@ export default function HomePage() {
         setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
         toast({ title: t('homepage.live.accessDenied'), description: t('homepage.live.accessDeniedDescription'), variant: "destructive" }); return;
       }
-      if (isUserInPrivateCall) return;
+      if (isUserInPrivateCall) return; // Don't process general stream if user is in a private call
+      
       setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
       setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
       setIsGeneralStreamLive(true); setGeneralStreamWebRtcError(null); setGeneralStreamReceived(null); setIsLoadingGeneralStream(true);
@@ -174,23 +175,32 @@ export default function HomePage() {
     const onOfferFromGeneralBroadcaster = async ({ broadcasterId, offer }: { broadcasterId: string, offer: RTCSessionDescriptionInit }) => {
       if (isUserInPrivateCall || !socket || !socket.connected) return;
       if (currentGeneralStreamIsLoggedInOnly && !loggedInUserId) { socket.emit('general-stream-access-denied', { message: 'This live stream is for registered users only.' }); setIsGeneralStreamLive(false); setIsLoadingGeneralStream(false); return; }
-      if (peerConnectionForGeneralStreamRef.current && peerConnectionForGeneralStreamRef.current.signalingState !== 'closed') peerConnectionForGeneralStreamRef.current.close();
+      
+      if (peerConnectionForGeneralStreamRef.current && peerConnectionForGeneralStreamRef.current.signalingState !== 'closed') {
+        peerConnectionForGeneralStreamRef.current.close();
+      }
       peerConnectionForGeneralStreamRef.current = new RTCPeerConnection(PC_CONFIG);
-      peerConnectionForGeneralStreamRef.current.ontrack = (event) => { if (event.streams[0]) { setGeneralStreamReceived(event.streams[0]); /* setIsLoadingGeneralStream(false); // Moved to useEffect */ } };
+      
+      peerConnectionForGeneralStreamRef.current.ontrack = (event) => { if (event.streams[0]) { console.log("HomePage: generalStream ontrack event, received stream:", event.streams[0]); setGeneralStreamReceived(event.streams[0]); } };
       peerConnectionForGeneralStreamRef.current.onicecandidate = (event) => { if (event.candidate && socket.connected) { try { socket.emit('general-stream-candidate-to-broadcaster', { broadcasterId, candidate: event.candidate }); } catch (e:any) { console.error("Error emitting ICE to broadcaster:", e.message);}} };
       peerConnectionForGeneralStreamRef.current.onconnectionstatechange = () => {
         if (peerConnectionForGeneralStreamRef.current) {
             const state = peerConnectionForGeneralStreamRef.current.connectionState;
-            if (state === 'connected') { setGeneralStreamWebRtcError(null); setIsLoadingGeneralStream(false); }
+            console.log("HomePage: generalStream PC state changed to:", state);
+            if (state === 'connected') { setGeneralStreamWebRtcError(null); /* setIsLoadingGeneralStream(false) handled by video element event */ }
             else if (['failed', 'disconnected', 'closed'].includes(state)) { setGeneralStreamWebRtcError(t('homepage.live.connectionLostError')); setIsGeneralStreamLive(false); setGeneralStreamReceived(null); setIsLoadingGeneralStream(false); }
         }
       };
       try {
+        console.log("HomePage: Received offer from general broadcaster, setting remote description.");
         await peerConnectionForGeneralStreamRef.current.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await peerConnectionForGeneralStreamRef.current.createAnswer();
         await peerConnectionForGeneralStreamRef.current.setLocalDescription(answer);
-        if (socket.connected) socket.emit('general-stream-answer-to-broadcaster', { broadcasterId, answer });
-      } catch (error:any) { setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError')); setIsLoadingGeneralStream(false); }
+        if (socket.connected) {
+          console.log("HomePage: Sending answer to general broadcaster.");
+          socket.emit('general-stream-answer-to-broadcaster', { broadcasterId, answer });
+        }
+      } catch (error:any) { console.error("HomePage: Error handling offer from general broadcaster:", error); setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError')); setIsLoadingGeneralStream(false); }
     };
     const onCandidateFromGeneralBroadcaster = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
       if (isUserInPrivateCall || !peerConnectionForGeneralStreamRef.current || !candidate || !peerConnectionForGeneralStreamRef.current.remoteDescription) return;
@@ -282,7 +292,7 @@ export default function HomePage() {
   const toggleUserVideo = () => { if (userLocalStreamForCall) { const newVideoState = !isUserVideoOff; userLocalStreamForCall.getVideoTracks().forEach(track => track.enabled = !newVideoState); setIsUserVideoOff(newVideoState); }};
   const toggleGeneralStreamMute = () => { if (generalStreamVideoRef.current) { generalStreamVideoRef.current.muted = !generalStreamVideoRef.current.muted; setIsGeneralStreamMuted(generalStreamVideoRef.current.muted); }};
 
-  useEffect(() => {
+useEffect(() => {
     const videoEl = generalStreamVideoRef.current;
     if (!videoEl) return;
 
@@ -290,32 +300,63 @@ export default function HomePage() {
 
     if (canShowGeneralStream && generalStreamReceived) {
         if (videoEl.srcObject !== generalStreamReceived) {
+            console.log("HomePage: Assigning new generalStreamReceived to video element.");
             videoEl.srcObject = generalStreamReceived;
             videoEl.muted = isGeneralStreamMuted;
-            
-            const onLoadedMetadata = () => {
-                videoEl.play().catch(e => {
+
+            const handleLoadedMetadata = () => {
+                console.log("HomePage: generalStreamVideoRef metadata loaded.");
+                videoEl.play().then(() => {
+                    console.log("HomePage: generalStreamVideoRef play() successful.");
+                    setIsLoadingGeneralStream(false);
+                }).catch(e => {
                     if (e.name !== 'AbortError') {
                         console.error("HomePage: Error playing general stream:", e);
                         setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError') + `: ${e.message}`);
                     }
-                }).finally(() => {
-                    setIsLoadingGeneralStream(false); // Set loading to false after play attempt
+                    // Aún así, quitar el loader si hay error, a menos que el error sea por no interacción
+                    if (e.name !== 'NotAllowedError') {
+                        setIsLoadingGeneralStream(false);
+                    }
                 });
             };
-            videoEl.addEventListener('loadedmetadata', onLoadedMetadata);
-            return () => videoEl.removeEventListener('loadedmetadata', onLoadedMetadata);
-        } else if (!videoEl.paused) {
-             if (isLoadingGeneralStream) setIsLoadingGeneralStream(false);
+            
+            const handleError = (e: Event) => {
+                console.error("HomePage: Video element error event", e);
+                if (e.target && (e.target as HTMLVideoElement).error) {
+                    setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError') + `: Video Error Code ${(e.target as HTMLVideoElement).error?.code}`);
+                }
+                setIsLoadingGeneralStream(false);
+            };
+
+            videoEl.addEventListener('loadedmetadata', handleLoadedMetadata);
+            videoEl.addEventListener('error', handleError);
+            
+            return () => {
+                console.log("HomePage: Cleanup for generalStreamVideoRef useEffect (stream or conditions changed)");
+                videoEl.removeEventListener('loadedmetadata', handleLoadedMetadata);
+                videoEl.removeEventListener('error', handleError);
+            };
+        } else if (videoEl.paused && !isLoadingGeneralStream && videoEl.readyState >= 3 /*HAVE_FUTURE_DATA*/) {
+            // Si el stream es el mismo pero está pausado y no estamos en estado de carga, intentar play
+            console.log("HomePage: Attempting to replay existing general stream.");
+            videoEl.play().catch(e => {
+                if (e.name !== 'AbortError' && e.name !== 'NotAllowedError') {
+                    console.error("HomePage: Error re-playing general stream:", e);
+                }
+            });
         }
-    } else {
-        if (videoEl.srcObject) videoEl.srcObject = null;
-        if (isLoadingGeneralStream && !isUserInPrivateCall) {
+    } else { 
+        if (videoEl.srcObject) {
+            console.log("HomePage: Clearing srcObject from generalStreamVideoRef because stream cannot be shown.");
+            videoEl.srcObject = null;
+        }
+        if (isLoadingGeneralStream && !isUserInPrivateCall) { // Solo quitar el loader si no estamos esperando una llamada privada
             setIsLoadingGeneralStream(false);
         }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generalStreamReceived, isGeneralStreamLive, isUserInPrivateCall, currentGeneralStreamIsLoggedInOnly, loggedInUserId, isGeneralStreamMuted, t]); // Removed isLoadingGeneralStream as direct dependency to prevent loop
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [generalStreamReceived, isGeneralStreamLive, isUserInPrivateCall, currentGeneralStreamIsLoggedInOnly, loggedInUserId, isGeneralStreamMuted]); // No incluir 't' directamente aquí si causa problemas de estabilidad
 
 
   useEffect(() => {
@@ -513,19 +554,17 @@ export default function HomePage() {
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
               </div>
             ) : videoCourses.length > 0 ? (
-              <div className="flex justify-center">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-center">
-                  {videoCourses.map((video) => (
-                    <VideoCard 
-                      key={video.id} 
-                      video={video}
-                      onWatchNowClick={handleOpenVideoPlayer}
-                      onCourseCardClick={handleOpenCourseDetail}
-                      displayCurrency={displayCurrency}
-                      exchangeRates={effectiveExchangeRates}
-                    />
-                  ))}
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-center">
+                {videoCourses.map((video) => (
+                  <VideoCard 
+                    key={video.id} 
+                    video={video}
+                    onWatchNowClick={handleOpenVideoPlayer}
+                    onCourseCardClick={handleOpenCourseDetail}
+                    displayCurrency={displayCurrency}
+                    exchangeRates={effectiveExchangeRates}
+                  />
+                ))}
               </div>
             ) : (
               <p className="text-center text-muted-foreground">
@@ -551,5 +590,4 @@ export default function HomePage() {
     </div>
   );
 }
-
     
