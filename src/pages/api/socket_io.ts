@@ -412,6 +412,7 @@ export default async function SocketHandler(
           generalBroadcasterSocketId = null;
           currentGeneralStreamTitle = null;
           currentGeneralStreamSubtitle = null;
+		  generalStreamViewers.clear();
           currentGeneralStreamIsLoggedInOnly = false;
           io.emit('general-broadcaster-disconnected');
         }
