@@ -454,34 +454,47 @@ export default function HomePage() {
   const toggleUserVideo = () => { if (userLocalStreamForCall) { const newVideoState = !isUserVideoOff; userLocalStreamForCall.getVideoTracks().forEach(track => track.enabled = !newVideoState); setIsUserVideoOff(newVideoState); }};
   const toggleGeneralStreamMute = () => { if (generalStreamVideoRef.current) { generalStreamVideoRef.current.muted = !generalStreamVideoRef.current.muted; setIsGeneralStreamMuted(generalStreamVideoRef.current.muted); }};
 
-useEffect(() => {
+  useEffect(() => {
     const videoEl = generalStreamVideoRef.current;
     if (!videoEl) return;
-
-    const canShowGeneralStream = isGeneralStreamLive && !isUserInPrivateCall && (!currentGeneralStreamIsLoggedInOnly || loggedInUserId);
-
-    if (canShowGeneralStream && generalStreamReceived) {
-        console.log("HomePage (generalStreamVideoRef Effect): Conditions met, generalStreamReceived is present. VideoEl srcObject current:", videoEl.srcObject ? videoEl.srcObject.id : 'null', "New stream ID:", generalStreamReceived.id);
-        if (videoEl.srcObject !== generalStreamReceived) {
-            console.log("HomePage (generalStreamVideoRef Effect): Assigning new generalStreamReceived to video element.");
-            videoEl.srcObject = generalStreamReceived;
-            videoEl.muted = isGeneralStreamMuted;
-
-            const handleLoadedMetadata = () => {
-                console.log("HomePage (generalStreamVideoRef Effect): 'loadedmetadata' event fired.");
-                videoEl.play()
-                    .then(() => {
-                        console.log("HomePage (generalStreamVideoRef Effect): play() successful.");
-                        setIsLoadingGeneralStream(false);
-                    })
-                    .catch(e => {
-                        console.error("HomePage (generalStreamVideoRef Effect): Error playing general stream:", e);
-                        if (e.name !== 'AbortError') {
-                            setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError') + `: ${e.message}`);
-                        }
-                        setIsLoadingGeneralStream(false);
-                    });
-            };
+  
+    if (isGeneralStreamLive && generalStreamReceived) {
+      console.log("Asignando nuevo stream al video element");
+      
+      // Limpia cualquier stream previo
+      if (videoEl.srcObject) {
+        videoEl.srcObject = null;
+      }
+  
+      // Asigna el nuevo stream
+      videoEl.srcObject = generalStreamReceived;
+      videoEl.muted = isGeneralStreamMuted;
+  
+      const handleCanPlay = () => {
+        console.log("Video puede reproducirse");
+        videoEl.play()
+          .then(() => {
+            console.log("Reproducción exitosa");
+            setIsLoadingGeneralStream(false);
+          })
+          .catch(e => {
+            console.error("Error al reproducir:", e);
+            setIsLoadingGeneralStream(false);
+          });
+      };
+  
+      videoEl.addEventListener('canplay', handleCanPlay);
+  
+      return () => {
+        videoEl.removeEventListener('canplay', handleCanPlay);
+      };
+    } else {
+      if (videoEl.srcObject) {
+        videoEl.srcObject = null;
+      }
+      setIsLoadingGeneralStream(false);
+    }
+  }, [generalStreamReceived, isGeneralStreamLive, isGeneralStreamMuted]);
             
             const handleError = (e: Event) => {
                 console.error("HomePage (generalStreamVideoRef Effect): Video element error event", e);
@@ -778,5 +791,3 @@ useEffect(() => {
     </div>
   );
 }
-
-    
