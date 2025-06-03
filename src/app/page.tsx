@@ -172,21 +172,39 @@ export default function HomePage() {
 
     const onGeneralBroadcasterReady = ({ broadcasterId, streamTitle: titleFromServer, streamSubtitle: subtitleFromServer, isLoggedInOnly }: { broadcasterId: string, streamTitle?: string, streamSubtitle?: string, isLoggedInOnly?: boolean }) => {
       console.log("HomePage: 'general-broadcaster-ready' received", {broadcasterId, titleFromServer, subtitleFromServer, isLoggedInOnly});
+      
+      // Cerrar cualquier conexión existente
+      if (peerConnectionForGeneralStreamRef.current) {
+        peerConnectionForGeneralStreamRef.current.close();
+        peerConnectionForGeneralStreamRef.current = null;
+      }
+      
       setCurrentGeneralStreamIsLoggedInOnly(isLoggedInOnly || false);
-
+      setGeneralStreamReceived(null);
+      setIsLoadingGeneralStream(true);
+    
       if (isLoggedInOnly && !loggedInUserId) {
-        setIsGeneralStreamLive(false); setGeneralStreamReceived(null); setIsLoadingGeneralStream(false);
+        setIsGeneralStreamLive(false); 
+        setGeneralStreamReceived(null); 
+        setIsLoadingGeneralStream(false);
         setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
         setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
-        toast({ title: t('homepage.live.accessDenied'), description: t('homepage.live.accessDeniedDescription'), variant: "destructive" }); return;
+        toast({ title: t('homepage.live.accessDenied'), description: t('homepage.live.accessDeniedDescription'), variant: "destructive" }); 
+        return;
       }
-      if (isUserInPrivateCall) { console.log("HomePage: In private call, ignoring 'general-broadcaster-ready'."); return; }
+      if (isUserInPrivateCall) { 
+        console.log("HomePage: In private call, ignoring 'general-broadcaster-ready'."); 
+        return; 
+      }
       
       setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
       setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
-      setIsGeneralStreamLive(true); setGeneralStreamWebRtcError(null); setGeneralStreamReceived(null); 
-      setIsLoadingGeneralStream(true); // Set loading true, waiting for offer
+      setIsGeneralStreamLive(true); 
+      setGeneralStreamWebRtcError(null); 
+      setGeneralStreamReceived(null); 
+      setIsLoadingGeneralStream(true);
     };
+
     const onGeneralStreamEnded = () => {
       console.log("HomePage: 'general-stream-ended' received.");
       if (isUserInPrivateCall) { console.log("HomePage: In private call, ignoring 'general-stream-ended'."); return;}
@@ -387,6 +405,7 @@ export default function HomePage() {
     socket.on('private-sdp-offer-received', onPrivateSdpOfferReceived);
     socket.on('private-ice-candidate-received', onPrivateIceCandidateReceived);
     socket.on('private-call-terminated-by-admin', onPrivateCallTerminatedByAdmin);
+    socket.on('admin-stream-started', onAdminStreamStarted);
 
     return () => {
         socket.off('general-broadcaster-ready', onGeneralBroadcasterReady);
@@ -399,9 +418,37 @@ export default function HomePage() {
         socket.off('private-sdp-offer-received', onPrivateSdpOfferReceived);
         socket.off('private-ice-candidate-received', onPrivateIceCandidateReceived);
         socket.off('private-call-terminated-by-admin', onPrivateCallTerminatedByAdmin);
+        socket.off('admin-stream-started', onAdminStreamStarted);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, siteSettings, loggedInUserId, isUserInPrivateCall, privateCallAdminSocketId, handleEndPrivateCall, toast, t, isUserMicMuted, isUserVideoOff, currentGeneralStreamIsLoggedInOnly]);
+
+  const onAdminStreamStarted = ({ streamTitle, streamSubtitle, isLoggedInOnly }: { 
+    streamTitle: string, 
+    streamSubtitle: string, 
+    isLoggedInOnly: boolean 
+  }) => {
+    console.log("Admin started new stream - reconnecting");
+    
+    if (isUserInPrivateCall) return;
+    
+    // Resetear conexión existente
+    if (peerConnectionForGeneralStreamRef.current) {
+      peerConnectionForGeneralStreamRef.current.close();
+      peerConnectionForGeneralStreamRef.current = null;
+    }
+    
+    setGeneralStreamReceived(null);
+    setIsLoadingGeneralStream(true);
+    setGeneralStreamTitle(streamTitle);
+    setGeneralStreamSubtitle(streamSubtitle);
+    setCurrentGeneralStreamIsLoggedInOnly(isLoggedInOnly);
+    
+    // Volver a registrarse
+    if (socket && socket.connected) {
+      socket.emit('register-general-viewer');
+    }
+  };
 
   const toggleUserMicrophone = () => { if (userLocalStreamForCall) { const newMicState = !isUserMicMuted; userLocalStreamForCall.getAudioTracks().forEach(track => track.enabled = !newMicState); setIsUserMicMuted(newMicState); }};
   const toggleUserVideo = () => { if (userLocalStreamForCall) { const newVideoState = !isUserVideoOff; userLocalStreamForCall.getVideoTracks().forEach(track => track.enabled = !newVideoState); setIsUserVideoOff(newVideoState); }};
