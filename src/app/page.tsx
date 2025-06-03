@@ -123,7 +123,7 @@ export default function HomePage() {
       const announcements: Announcement[] = await response.json();
       if (announcements.length > 0) {
         const firstAnn = announcements[0];
-        const viewedKey = `announcement_viewed_${firstAnn.id}`;
+        const viewedKey = announcement_viewed_${firstAnn.id};
         if (firstAnn.showOnce && typeof window !== 'undefined' && localStorage.getItem(viewedKey) === 'true') {
           setCurrentAnnouncement(null);
         } else {
@@ -148,7 +148,7 @@ export default function HomePage() {
   const handleWatchFromDetailModal = (video: Video) => { setIsCourseDetailModalOpen(false); handleOpenVideoPlayer(video); };
 
   const handleEndPrivateCall = useCallback((emitToServer = true, reason = "User ended call") => {
-    console.log(`HomePage: Ending private call. Emit to server: ${emitToServer}. Reason: ${reason}`);
+    console.log(HomePage: Ending private call. Emit to server: ${emitToServer}. Reason: ${reason});
     if (peerConnectionForPrivateCallRef.current) {
       console.log("HomePage: Closing existing peerConnectionForPrivateCallRef.");
       peerConnectionForPrivateCallRef.current.close();
@@ -221,31 +221,30 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!socket) return;
-  
-    const onGeneralBroadcasterReady = ({ broadcasterId, streamTitle, streamSubtitle, isLoggedInOnly }) => {
-      // ... detección de cambios y re-registro solo si broadcasterId cambió ...
-      if (broadcasterId !== currentBroadcasterId) {
-        setCurrentBroadcasterId(broadcasterId);
-        setIsGeneralStreamLive(true);
-        if (socket && socket.connected) socket.emit('register-general-viewer');
-      }
-    };
-    const onGeneralStreamEnded = () => {
+
+    socket.on('connect', () => {
+      console.log("HomePage: Socket connected. ID:", socket.id);
+      if (!isUserInPrivateCall) socket.emit('register-general-viewer');
+    });
+    socket.on('connect_error', (error) => {
+      console.error("HomePage: Socket connection error:", error);
+      toast({ variant: 'destructive', title: 'Socket Connection Error', description: User: ${error.message} });
+    });
+    socket.on('disconnect', (reason) => {
+      console.log(HomePage: Socket disconnected. Reason: ${reason}. Was general stream live: ${isGeneralStreamLive}, Was in private call: ${isUserInPrivateCall});
+      if (reason !== 'io client disconnect') toast({ variant: 'destructive', title: 'Socket Disconnected', description: Reason: ${reason} });
+
       setIsGeneralStreamLive(false);
-      setCurrentBroadcasterId(null);
-      // ... cerrar peerconnection, limpiar estados …
-    };
-  
-    socket.on('general-broadcaster-ready', onGeneralBroadcasterReady);
-    socket.on('general-stream-ended', onGeneralStreamEnded);
-    socket.on('general-broadcaster-disconnected', onGeneralStreamEnded);
-  
-    return () => {
-      socket.off('general-broadcaster-ready', onGeneralBroadcasterReady);
-      socket.off('general-stream-ended', onGeneralStreamEnded);
-      socket.off('general-broadcaster-disconnected', onGeneralStreamEnded);
-    };
-  }, [socket, currentBroadcasterId]);
+      setGeneralStreamReceived(null);
+      setCurrentGeneralStreamIsLoggedInOnly(false);
+      setIsLoadingGeneralStream(false);
+      if (peerConnectionForGeneralStreamRef.current) {
+        peerConnectionForGeneralStreamRef.current.close();
+        peerConnectionForGeneralStreamRef.current = null;
+      }
+
+      if (isUserInPrivateCall) handleEndPrivateCall(false, "Socket disconnected during call");
+    });
 
     const onGeneralBroadcasterReady = ({
       broadcasterId,
@@ -515,12 +514,12 @@ export default function HomePage() {
           peerConnectionForPrivateCallRef.current.onconnectionstatechange = () => {
             if (peerConnectionForPrivateCallRef.current) {
               const state = peerConnectionForPrivateCallRef.current.connectionState;
-              console.log(`HomePage (Private Call): PC connection state changed to: ${state}`);
+              console.log(HomePage (Private Call): PC connection state changed to: ${state});
               if (state === 'connected') {
                 setPrivateCallStatusMessage(t('homepage.privateCall.statusConnected'));
                 setIsLoadingPrivateCallVideo(false);
               } else if (['failed', 'disconnected', 'closed'].includes(state)) {
-                if (isUserInPrivateCall) handleEndPrivateCall(false, `PC state changed to ${state}`);
+                if (isUserInPrivateCall) handleEndPrivateCall(false, PC state changed to ${state});
               }
             }
           };
@@ -730,7 +729,7 @@ export default function HomePage() {
             .catch(e => {
               console.error("HomePage (generalStreamVideoRef Effect): Error playing general stream:", e);
               if (e.name !== 'AbortError') {
-                setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError') + `: Playback failed - ${e.message}`);
+                setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError') + : Playback failed - ${e.message});
               }
               setIsLoadingGeneralStream(false);
             });
@@ -739,7 +738,7 @@ export default function HomePage() {
         handleErrorGlobal = (e: Event) => {
           console.error("HomePage (generalStreamVideoRef Effect): Video element error event", e);
           if (e.target && (e.target as HTMLVideoElement).error) {
-            setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError') + `: Video Error Code ${(e.target as HTMLVideoElement).error?.code}`);
+            setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError') + : Video Error Code ${(e.target as HTMLVideoElement).error?.code});
           } else {
             setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError') + ": Unknown video element error.");
           }
@@ -878,7 +877,7 @@ export default function HomePage() {
         <section
           className="relative bg-gradient-to-br from-primary/20 via-background to-background py-20 md:py-32 text-center overflow-hidden"
           style={{
-            backgroundImage: `radial-gradient(circle at top right, hsl(var(--primary)/0.1), transparent 40%), radial-gradient(circle at bottom left, hsl(var(--primary)/0.15), transparent 50%)`,
+            backgroundImage: radial-gradient(circle at top right, hsl(var(--primary)/0.1), transparent 40%), radial-gradient(circle at bottom left, hsl(var(--primary)/0.15), transparent 50%),
           }}
         >
           <div className="container mx-auto px-4 relative z-10">
@@ -1071,7 +1070,7 @@ export default function HomePage() {
           onOpenChange={(open) => {
             setIsAnnouncementModalOpen(open);
             if (!open && currentAnnouncement?.showOnce && currentAnnouncement.id && typeof window !== 'undefined') {
-              localStorage.setItem(`announcement_viewed_${currentAnnouncement.id}`, 'true');
+              localStorage.setItem(announcement_viewed_${currentAnnouncement.id}, 'true');
             }
           }}
           announcement={currentAnnouncement}
