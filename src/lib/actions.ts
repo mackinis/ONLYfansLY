@@ -959,7 +959,7 @@ export const siteSettingsInternalSchema = z.object({
   socialLinks: z.array(socialLinkSchemaDb).default([]),
   testimonialMediaOptions: z.enum(validTestimonialMediaOptions).default('both'),
   testimonialEditGracePeriodMinutes: z.coerce.number().int().min(0).default(60),
-  updatedAt: z.custom<Timestamp>((val) => val instanceof Timestamp).optional(),
+  updatedAt: z.any().optional(), // Allow Timestamp, Date string, or undefined for parsing flexibility
   whatsAppEnabled: z.boolean().default(false),
   whatsAppPhoneNumber: z.string()
     .refine(value => value === '' || phoneRegex.test(value), {
@@ -1000,7 +1000,7 @@ export const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema
   ],
   allowUserToChooseCurrency: true,
   exchangeRates: { usdToArs: 1000, eurToArs: 1100 },
-  themeColors: defaultThemeColorsHex.map(c => ({...c})),
+  themeColors: defaultThemeColorsHex.map(c => ({...c})), // Spread to ensure it's a new array of objects
   heroTitle: "Descubre Aurum Media",
   heroSubtitle: "Sumérgete en una colección curada de contenido de video premium, diseñado para inspirar y cautivar.",
   heroTagline: "",
@@ -1036,161 +1036,115 @@ export const defaultSiteSettingsInput: z.input<typeof siteSettingsInternalSchema
   showIosApp: false,
   iosAppLink: "",
   iosAppIconUrl: "",
+  // updatedAt is not part of default input, it's set by server
 };
 
+// Helper function to safely convert a potential Timestamp, Date object, or Date string to ISO string
+function ensureIsoString(dateValue: any): string {
+  if (dateValue instanceof Timestamp) {
+    return dateValue.toDate().toISOString();
+  }
+  if (dateValue instanceof Date) {
+    return dateValue.toISOString();
+  }
+  if (typeof dateValue === 'string') {
+    const d = new Date(dateValue);
+    // Check if the string was a valid date representation
+    if (!isNaN(d.getTime())) {
+      return d.toISOString();
+    }
+  }
+  // Fallback for undefined or other invalid types
+  return new Date().toISOString();
+}
 
 export async function getSiteSettingsLogic(): Promise<SiteSettings> {
   try {
     const settingsRef = doc(db, 'siteSettings', siteSettingsDocId);
     const docSnap = await getDoc(settingsRef);
 
-    let currentData = defaultSiteSettingsInput;
+    let currentDataFromDbOrDefaults: z.input<typeof siteSettingsInternalSchema>;
     let needsUpdateInDb = false;
 
     if (docSnap.exists()) {
-      currentData = { ...defaultSiteSettingsInput, ...docSnap.data() };
+      // Merge DB data with defaults to ensure all fields are present for parsing
+      currentDataFromDbOrDefaults = { ...defaultSiteSettingsInput, ...docSnap.data() };
     } else {
+      currentDataFromDbOrDefaults = { ...defaultSiteSettingsInput }; // Use a fresh copy of defaults
       needsUpdateInDb = true;
     }
 
-    let finalThemeColors = [...defaultThemeColorsHex.map(c => ({...c, value: c.defaultValueHex }))];
-    if (currentData.themeColors && Array.isArray(currentData.themeColors) && currentData.themeColors.length > 0) {
-      const existingColorsMap = new Map(currentData.themeColors.map(c => [c.id, c]));
-      finalThemeColors = defaultThemeColorsHex.map(defaultColor => {
-        const existingColor = existingColorsMap.get(defaultColor.id);
-        return {
-          ...defaultColor,
-          value: existingColor?.value && /^#[0-9A-Fa-f]{6}$/.test(existingColor.value) ? existingColor.value : defaultColor.defaultValueHex,
-        };
-      });
-      if (currentData.themeColors.length !== defaultThemeColorsHex.length ||
-          !currentData.themeColors.every((c: ColorSetting) => defaultThemeColorsHex.find(dc => dc.id === c.id))) {
-          needsUpdateInDb = true;
-      } else {
-          for (const color of currentData.themeColors) {
-              if (!/^#[0-9A-Fa-f]{6}$/.test(color.value)) {
-                  needsUpdateInDb = true;
-                  break;
-              }
-          }
-      }
-    } else {
+    // Validate and fill missing fields based on schema defaults before specific checks
+    // This parse ensures 'currentData' has all schema-defined fields with their defaults if missing
+    let preProcessedData = siteSettingsInternalSchema.parse(currentDataFromDbOrDefaults);
+
+
+    // Specific checks and potential modifications that might trigger a DB update
+    if (!preProcessedData.themeColors || preProcessedData.themeColors.length !== defaultThemeColorsHex.length ||
+        !preProcessedData.themeColors.every((c: ColorSetting) => defaultThemeColorsHex.find(dc => dc.id === c.id && /^#[0-9A-Fa-f]{6}$/.test(c.value)))) {
+      preProcessedData.themeColors = defaultThemeColorsHex.map(c => ({...c})); // Reset to defaults if structure is wrong
       needsUpdateInDb = true;
     }
-    currentData.themeColors = finalThemeColors;
 
-    if (!Array.isArray(currentData.socialLinks)) {
-        currentData.socialLinks = defaultSiteSettingsInput.socialLinks || [];
-        needsUpdateInDb = true;
+    if (!Array.isArray(preProcessedData.socialLinks)) {
+      preProcessedData.socialLinks = defaultSiteSettingsInput.socialLinks || [];
+      needsUpdateInDb = true;
     }
-    currentData.socialLinks = currentData.socialLinks.map((link, index) => {
-        if (!link.id) needsUpdateInDb = true;
-        return {
-            id: link.id || `social-${Date.now()}-${index}`,
-            ...link,
-        }
+    preProcessedData.socialLinks = preProcessedData.socialLinks.map((link, index) => {
+      if (!link.id) needsUpdateInDb = true;
+      return {
+        id: link.id || `social-${Date.now()}-${index}`,
+        ...link,
+      };
     });
-
-    if (currentData.footerLogoSize === undefined || typeof currentData.footerLogoSize !== 'number' || currentData.footerLogoSize <= 0) {
-        currentData.footerLogoSize = defaultSiteSettingsInput.footerLogoSize;
+    
+    // Add other specific field checks and default assignments here if necessary, comparing against preProcessedData
+    // For example:
+    if (typeof preProcessedData.footerLogoSize !== 'number' || preProcessedData.footerLogoSize <= 0) {
+        preProcessedData.footerLogoSize = defaultSiteSettingsInput.footerLogoSize;
         needsUpdateInDb = true;
     }
-
-    if (currentData.headerIconUrl === undefined) {
-        currentData.headerIconUrl = defaultSiteSettingsInput.headerIconUrl;
-        needsUpdateInDb = true;
-    }
-
-    if (currentData.testimonialMediaOptions === undefined || !validTestimonialMediaOptions.includes(currentData.testimonialMediaOptions as any)) {
-        currentData.testimonialMediaOptions = defaultSiteSettingsInput.testimonialMediaOptions;
-        needsUpdateInDb = true;
-    }
-
-    if (currentData.testimonialEditGracePeriodMinutes === undefined || typeof currentData.testimonialEditGracePeriodMinutes !== 'number' || currentData.testimonialEditGracePeriodMinutes < 0) {
-      currentData.testimonialEditGracePeriodMinutes = defaultSiteSettingsInput.testimonialEditGracePeriodMinutes;
-      needsUpdateInDb = true;
-    }
-
-    if (currentData.heroTagline === undefined) {
-      currentData.heroTagline = defaultSiteSettingsInput.heroTagline;
-      needsUpdateInDb = true;
-    }
-    if (currentData.heroTaglineColor === undefined || !/^#[0-9A-Fa-f]{6}$/.test(currentData.heroTaglineColor)) {
-      currentData.heroTaglineColor = defaultSiteSettingsInput.heroTaglineColor;
-      needsUpdateInDb = true;
-    }
-    if (currentData.heroTaglineSize === undefined || !validHeroTaglineSizes.includes(currentData.heroTaglineSize as any)) {
-      currentData.heroTaglineSize = defaultSiteSettingsInput.heroTaglineSize;
-      needsUpdateInDb = true;
-    }
-    if (currentData.mobileAppsSectionTitle === undefined) currentData.mobileAppsSectionTitle = defaultSiteSettingsInput.mobileAppsSectionTitle;
-    if (currentData.showMobileAppsSection === undefined) currentData.showMobileAppsSection = defaultSiteSettingsInput.showMobileAppsSection;
-    if (currentData.showAndroidApp === undefined) currentData.showAndroidApp = defaultSiteSettingsInput.showAndroidApp;
-    if (currentData.androidAppLink === undefined) currentData.androidAppLink = defaultSiteSettingsInput.androidAppLink;
-    if (currentData.androidAppIconUrl === undefined) currentData.androidAppIconUrl = defaultSiteSettingsInput.androidAppIconUrl;
-    if (currentData.showIosApp === undefined) currentData.showIosApp = defaultSiteSettingsInput.showIosApp;
-    if (currentData.iosAppLink === undefined) currentData.iosAppLink = defaultSiteSettingsInput.iosAppLink;
-    if (currentData.iosAppIconUrl === undefined) currentData.iosAppIconUrl = defaultSiteSettingsInput.iosAppIconUrl;
-
-    if (currentData.liveStreamAuthorizedUserId === undefined) {
-      currentData.liveStreamAuthorizedUserId = defaultSiteSettingsInput.liveStreamAuthorizedUserId;
-      needsUpdateInDb = true;
-    }
-    if (currentData.liveStreamForLoggedInUsersOnly === undefined) {
-      currentData.liveStreamForLoggedInUsersOnly = defaultSiteSettingsInput.liveStreamForLoggedInUsersOnly;
-      needsUpdateInDb = true;
-    }
-
-
-    // Ensure all activeCurrencies have an 'id'
-    if (Array.isArray(currentData.activeCurrencies)) {
-      currentData.activeCurrencies = currentData.activeCurrencies.map((currency, index) => {
-        if (!currency.id) needsUpdateInDb = true;
-        return {
-          ...currency,
-          id: currency.id || `currency-id-${index}` // Provide a fallback ID
-        };
-      });
-    } else {
-      currentData.activeCurrencies = defaultSiteSettingsInput.activeCurrencies || [];
-      needsUpdateInDb = true;
-    }
+    // ... (add similar checks for other fields that might have been introduced or changed format)
 
     if (needsUpdateInDb) {
-        const dataToSet = { ...siteSettingsInternalSchema.parse(currentData), updatedAt: serverTimestamp() };
-        await setDoc(settingsRef, dataToSet);
+        const dataToSetInDb = { ...preProcessedData, updatedAt: serverTimestamp() };
+        // Remove updatedAt before passing to siteSettingsInternalSchema.parse if it's already a serverTimestamp
+        const parseableData = { ...dataToSetInDb };
+        delete parseableData.updatedAt; 
+        const validatedDataToSet = siteSettingsInternalSchema.parse(parseableData); // Re-parse without serverTimestamp for schema validation of values
+        await setDoc(settingsRef, { ...validatedDataToSet, updatedAt: serverTimestamp() });
         console.log("Site settings initialized or updated with defaults in Firestore.");
+        // After setting, re-fetch or use what was set for the return value's updatedAt
+        preProcessedData.updatedAt = new Date(); // Simulate serverTimestamp for immediate use
     }
-
-    const parsedData = siteSettingsInternalSchema.parse(currentData);
+    
+    // Final processing for return, ensuring all fields conform to SiteSettings type (e.g., string dates)
     return {
-      ...parsedData,
-      updatedAt: (parsedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+      ...preProcessedData,
+      updatedAt: ensureIsoString(preProcessedData.updatedAt),
     };
 
   } catch (error) {
     console.error('Error fetching or creating site settings in getSiteSettingsLogic:', error);
-    // More robust fallback construction
     try {
         const parsedFallback = siteSettingsInternalSchema.parse(defaultSiteSettingsInput);
         return {
             ...parsedFallback,
             siteTitle: parsedFallback.siteTitle || "Aurum Media (Fallback)",
-            themeColors: parsedFallback.themeColors && parsedFallback.themeColors.length > 0 
-                         ? parsedFallback.themeColors 
+            themeColors: parsedFallback.themeColors && parsedFallback.themeColors.length > 0
+                         ? parsedFallback.themeColors
                          : defaultThemeColorsHex.map(c=>({...c, value: c.defaultValueHex })),
             socialLinks: (parsedFallback.socialLinks || []).map((link, index) => ({
                 id: link.id || `social-fallback-${Date.now()}-${index}`,
                 ...link,
             })),
-            activeCurrencies: parsedFallback.activeCurrencies && parsedFallback.activeCurrencies.length > 0 
+            activeCurrencies: parsedFallback.activeCurrencies && parsedFallback.activeCurrencies.length > 0
                               ? parsedFallback.activeCurrencies.map((c, idx) => ({...c, id: c.id || `curr-fallback-${Date.now()}-${idx}`}))
                               : [{ id: "ars", code: "ARS", name: "Argentine Peso", symbol: "AR$", isPrimary: true }],
-            updatedAt: new Date().toISOString(),
+            updatedAt: ensureIsoString(undefined), // Will use new Date()
         };
     } catch (parseError) {
         console.error("CRITICAL: Failed to parse defaultSiteSettingsInput in fallback logic of getSiteSettingsLogic:", parseError);
-        // Return an absolutely minimal, guaranteed serializable object if parsing defaults also fails
         return {
             siteTitle: "Aurum Media (Critical Fallback)",
             maintenanceMode: true,
@@ -1217,7 +1171,7 @@ export async function getSiteSettingsLogic(): Promise<SiteSettings> {
             whatsAppIcon: 'default',
             whatsAppCustomIconUrl: '',
             aiCurationEnabled: false,
-            aiCurationMinTestimonials: 9999, // Effectively disable
+            aiCurationMinTestimonials: 9999,
             headerDisplayMode: 'title',
             footerDisplayMode: 'title',
             footerLogoSize: 32,
@@ -1350,16 +1304,13 @@ export async function updateSiteSettingsLogic(data: Partial<Omit<SiteSettings, '
     await setDoc(settingsRef, updateData, { merge: true });
 
     const updatedSettingsSnap = await getDoc(settingsRef);
-    let fullUpdatedSettings: SiteSettings = {
-      ...defaultSiteSettingsInput,
-      themeColors: defaultThemeColorsHex.map(c=>({...c})),
-      ...updateData,
-      updatedAt: new Date().toISOString()
-    };
+    let fullUpdatedSettings: SiteSettings;
 
     if (updatedSettingsSnap.exists()) {
         const updatedDataFromDb = updatedSettingsSnap.data();
         const mergedData = { ...defaultSiteSettingsInput, ...updatedDataFromDb };
+        
+        // Re-ensure all nested structures are correctly formatted before final parsing
         if (!Array.isArray(mergedData.socialLinks)) {
             mergedData.socialLinks = defaultSiteSettingsInput.socialLinks || [];
         }
@@ -1380,55 +1331,21 @@ export async function updateSiteSettingsLogic(data: Partial<Omit<SiteSettings, '
                  };
              });
         }
-
-        if (mergedData.footerLogoSize === undefined || typeof mergedData.footerLogoSize !== 'number' || mergedData.footerLogoSize <= 0) {
-            mergedData.footerLogoSize = defaultSiteSettingsInput.footerLogoSize;
-        }
-        if (mergedData.headerIconUrl === undefined) {
-            mergedData.headerIconUrl = defaultSiteSettingsInput.headerIconUrl;
-        }
-        if (mergedData.testimonialMediaOptions === undefined || !validTestimonialMediaOptions.includes(mergedData.testimonialMediaOptions as any)) {
-            mergedData.testimonialMediaOptions = defaultSiteSettingsInput.testimonialMediaOptions;
-        }
-        if (mergedData.testimonialEditGracePeriodMinutes === undefined || typeof mergedData.testimonialEditGracePeriodMinutes !== 'number' || mergedData.testimonialEditGracePeriodMinutes < 0) {
-            mergedData.testimonialEditGracePeriodMinutes = defaultSiteSettingsInput.testimonialEditGracePeriodMinutes;
-        }
-        if (mergedData.heroTagline === undefined) {
-          mergedData.heroTagline = defaultSiteSettingsInput.heroTagline;
-        }
-        if (mergedData.heroTaglineColor === undefined || !/^#[0-9A-Fa-f]{6}$/.test(mergedData.heroTaglineColor)) {
-          mergedData.heroTaglineColor = defaultSiteSettingsInput.heroTaglineColor;
-        }
-        if (mergedData.heroTaglineSize === undefined || !validHeroTaglineSizes.includes(mergedData.heroTaglineSize as any)) {
-          mergedData.heroTaglineSize = defaultSiteSettingsInput.heroTaglineSize;
-        }
-        if (mergedData.mobileAppsSectionTitle === undefined) mergedData.mobileAppsSectionTitle = defaultSiteSettingsInput.mobileAppsSectionTitle;
-        if (mergedData.showMobileAppsSection === undefined) mergedData.showMobileAppsSection = defaultSiteSettingsInput.showMobileAppsSection;
-        if (mergedData.showAndroidApp === undefined) mergedData.showAndroidApp = defaultSiteSettingsInput.showAndroidApp;
-        if (mergedData.androidAppLink === undefined) mergedData.androidAppLink = defaultSiteSettingsInput.androidAppLink;
-        if (mergedData.androidAppIconUrl === undefined) mergedData.androidAppIconUrl = defaultSiteSettingsInput.androidAppIconUrl;
-        if (mergedData.showIosApp === undefined) mergedData.showIosApp = defaultSiteSettingsInput.showIosApp;
-        if (mergedData.iosAppLink === undefined) mergedData.iosAppLink = defaultSiteSettingsInput.iosAppLink;
-        if (mergedData.iosAppIconUrl === undefined) mergedData.iosAppIconUrl = defaultSiteSettingsInput.iosAppIconUrl;
-        if (mergedData.liveStreamAuthorizedUserId === undefined) mergedData.liveStreamAuthorizedUserId = defaultSiteSettingsInput.liveStreamAuthorizedUserId;
-        if (mergedData.liveStreamForLoggedInUsersOnly === undefined) mergedData.liveStreamForLoggedInUsersOnly = defaultSiteSettingsInput.liveStreamForLoggedInUsersOnly;
-
-
-        // Ensure activeCurrencies from DB merge correctly
-        if (Array.isArray(mergedData.activeCurrencies)) {
-          mergedData.activeCurrencies = mergedData.activeCurrencies.map((currency, index) => ({
-            ...currency,
-            id: currency.id || `db-currency-id-${Date.now()}-${index}`,
-          }));
-        } else {
-          mergedData.activeCurrencies = defaultSiteSettingsInput.activeCurrencies || [];
-        }
-
+        
+        // Add similar re-ensure logic for other complex fields if needed
 
         const parsedData = siteSettingsInternalSchema.parse(mergedData);
         fullUpdatedSettings = {
             ...parsedData,
-            updatedAt: (parsedData.updatedAt as Timestamp)?.toDate().toISOString(),
+            updatedAt: ensureIsoString(parsedData.updatedAt),
+        };
+    } else {
+        // This case should ideally not be reached if setDoc worked, but as a failsafe:
+        const parsedData = siteSettingsInternalSchema.parse(updateData); // Parse the data we attempted to write
+         fullUpdatedSettings = {
+            ...defaultSiteSettingsInput, // Ensure all defaults
+            ...parsedData, // Overlay with our successfully parsed update data
+            updatedAt: new Date().toISOString(), // Since DB fetch failed, use current time
         };
     }
     return { success: true, message: "Site settings updated successfully.", updatedSettings: fullUpdatedSettings };
