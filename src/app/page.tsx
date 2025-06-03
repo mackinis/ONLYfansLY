@@ -219,96 +219,203 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loggedInUserId, siteSettings, isLoadingSiteSettings]);
 
-  useEffect(() => {
-    if (!socket) return;
+useEffect(() => {
+  if (!socket) return;
 
-    socket.on('connect', () => {
-      console.log("HomePage: Socket connected. ID:", socket.id);
-      if (!isUserInPrivateCall) socket.emit('register-general-viewer');
-    });
-    socket.on('connect_error', (error) => {
-      console.error("HomePage: Socket connection error:", error);
-      toast({ variant: 'destructive', title: 'Socket Connection Error', description: User: ${error.message} });
-    });
-    socket.on('disconnect', (reason) => {
-      console.log(HomePage: Socket disconnected. Reason: ${reason}. Was general stream live: ${isGeneralStreamLive}, Was in private call: ${isUserInPrivateCall});
-      if (reason !== 'io client disconnect') toast({ variant: 'destructive', title: 'Socket Disconnected', description: Reason: ${reason} });
+  // 1) Conexión y desconexión del socket
+  socket.on('connect', () => {
+    console.log("HomePage: Socket connected. ID:", socket.id);
+    if (!isUserInPrivateCall) {
+      socket.emit('register-general-viewer');
+    }
+  });
 
+  socket.on('connect_error', (error) => {
+    console.error("HomePage: Socket connection error:", error);
+    toast({
+      variant: 'destructive',
+      title: 'Socket Connection Error',
+      description: `User: ${error.message}`
+    });
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(
+      `HomePage: Socket disconnected. Reason: ${reason}. ` +
+      `Was general stream live: ${isGeneralStreamLive}, Was in private call: ${isUserInPrivateCall}`
+    );
+    if (reason !== 'io client disconnect') {
+      toast({
+        variant: 'destructive',
+        title: 'Socket Disconnected',
+        description: `Reason: ${reason}`
+      });
+    }
+
+    // Limpiar UI y estado de WebRTC
+    setIsGeneralStreamLive(false);
+    setGeneralStreamReceived(null);
+    setCurrentGeneralStreamIsLoggedInOnly(false);
+    setIsLoadingGeneralStream(false);
+
+    if (peerConnectionForGeneralStreamRef.current) {
+      peerConnectionForGeneralStreamRef.current.close();
+      peerConnectionForGeneralStreamRef.current = null;
+    }
+
+    if (isUserInPrivateCall) {
+      handleEndPrivateCall(false, "Socket disconnected during call");
+    }
+  });
+
+  // 2) Cuando el broadcaster general está listo
+  const onGeneralBroadcasterReady = ({
+    broadcasterId,
+    streamTitle: titleFromServer,
+    streamSubtitle: subtitleFromServer,
+    isLoggedInOnly
+  }: {
+    broadcasterId: string;
+    streamTitle?: string;
+    streamSubtitle?: string;
+    isLoggedInOnly?: boolean;
+  }) => {
+    console.log(
+      "HomePage: 'general-broadcaster-ready' received",
+      { broadcasterId, titleFromServer, subtitleFromServer, isLoggedInOnly }
+    );
+
+    // Cerrar PC abierto si existía
+    if (
+      peerConnectionForGeneralStreamRef.current &&
+      peerConnectionForGeneralStreamRef.current.signalingState !== 'closed'
+    ) {
+      console.log(
+        "HomePage: Closing existing general PC on 'general-broadcaster-ready'."
+      );
+      peerConnectionForGeneralStreamRef.current.close();
+      peerConnectionForGeneralStreamRef.current = null;
+    }
+
+    // Actualizar estados previos a WebRTC
+    setCurrentGeneralStreamIsLoggedInOnly(isLoggedInOnly || false);
+    setGeneralStreamReceived(null);
+    setIsLoadingGeneralStream(true);
+
+    // Denegar acceso si es un stream “solo para logueados” y no hay usuario logueado
+    if (isLoggedInOnly && !loggedInUserId) {
       setIsGeneralStreamLive(false);
       setGeneralStreamReceived(null);
-      setCurrentGeneralStreamIsLoggedInOnly(false);
       setIsLoadingGeneralStream(false);
-      if (peerConnectionForGeneralStreamRef.current) {
-        peerConnectionForGeneralStreamRef.current.close();
-        peerConnectionForGeneralStreamRef.current = null;
+      setGeneralStreamTitle(
+        titleFromServer ||
+        siteSettings?.liveStreamDefaultTitle ||
+        t('homepage.live.defaultTitle')
+      );
+      setGeneralStreamSubtitle(
+        subtitleFromServer || siteSettings?.liveStreamSubtitle || ''
+      );
+      toast({
+        title: t('homepage.live.accessDenied'),
+        description: t('homepage.live.accessDeniedDescription'),
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Ignorar si estamos en llamada privada
+    if (isUserInPrivateCall) {
+      console.log(
+        "HomePage: In private call, ignoring 'general-broadcaster-ready'."
+      );
+      setIsLoadingGeneralStream(false);
+      return;
+    }
+
+    // Solo si cambió el broadcasterId: re-registrar una vez
+    if (broadcasterId !== currentBroadcasterId) {
+      setCurrentBroadcasterId(broadcasterId);
+      setGeneralStreamTitle(
+        titleFromServer ||
+        siteSettings?.liveStreamDefaultTitle ||
+        t('homepage.live.defaultTitle')
+      );
+      setGeneralStreamSubtitle(
+        subtitleFromServer || siteSettings?.liveStreamSubtitle || ''
+      );
+      setIsGeneralStreamLive(true);
+      setGeneralStreamWebRtcError(null);
+
+      // Re-registrar como viewer una sola vez para este broadcasterId
+      if (socket && socket.connected) {
+        console.log(
+          "HomePage: Re-registrando como viewer tras 'general-broadcaster-ready'."
+        );
+        socket.emit("register-general-viewer");
       }
+    } else {
+      console.log(
+        "HomePage: Ya me re-registré para este broadcasterId, ignoro."
+      );
+    }
+  };
 
-      if (isUserInPrivateCall) handleEndPrivateCall(false, "Socket disconnected during call");
-    });
+  // 3) Cuando el stream general termina o el broadcaster se desconecta
+  const onGeneralStreamEnded = () => {
+    console.log("HomePage: 'general-stream-ended' o 'general-broadcaster-disconnected' received.");
+    if (isUserInPrivateCall) {
+      console.log("HomePage: In private call, ignoring 'general-stream-ended'.");
+      return;
+    }
 
-    const onGeneralBroadcasterReady = ({
-      broadcasterId,
-      streamTitle: titleFromServer,
-      streamSubtitle: subtitleFromServer,
-      isLoggedInOnly
-    }: {
-      broadcasterId: string;
-      streamTitle?: string;
-      streamSubtitle?: string;
-      isLoggedInOnly?: boolean;
-    }) => {
-      console.log("HomePage: 'general-broadcaster-ready' received", { broadcasterId, titleFromServer, subtitleFromServer, isLoggedInOnly });
+    setIsGeneralStreamLive(false);
+    setGeneralStreamReceived(null);
+    setCurrentGeneralStreamIsLoggedInOnly(false);
+    setIsLoadingGeneralStream(false);
 
-      // Si hay PC abierto, lo cerramos
-      if (peerConnectionForGeneralStreamRef.current && peerConnectionForGeneralStreamRef.current.signalingState !== 'closed') {
-        console.log("HomePage: Closing existing general PC on 'general-broadcaster-ready'.");
-        peerConnectionForGeneralStreamRef.current.close();
-        peerConnectionForGeneralStreamRef.current = null;
-      }
+    // Limpiar el ID local para permitir futuro re-registro
+    setCurrentBroadcasterId(null);
 
-      setCurrentGeneralStreamIsLoggedInOnly(isLoggedInOnly || false);
-      setGeneralStreamReceived(null);
-      setIsLoadingGeneralStream(true);
+    // Cerrar peerConnection si existía
+    if (peerConnectionForGeneralStreamRef.current) {
+      peerConnectionForGeneralStreamRef.current.close();
+      peerConnectionForGeneralStreamRef.current = null;
+    }
 
-      // Si es stream “solo para logueados” y no estoy logueado, denegar acceso
-      if (isLoggedInOnly && !loggedInUserId) {
-        setIsGeneralStreamLive(false);
-        setGeneralStreamReceived(null);
-        setIsLoadingGeneralStream(false);
-        setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-        setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
-        toast({
-          title: t('homepage.live.accessDenied'),
-          description: t('homepage.live.accessDeniedDescription'),
-          variant: "destructive"
-        });
-        return;
-      }
+    // Restablecer títulos/subtítulos a valores por defecto
+    setGeneralStreamTitle(
+      siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle')
+    );
+    setGeneralStreamSubtitle(
+      siteSettings?.liveStreamSubtitle || ''
+    );
+    setGeneralStreamWebRtcError(null);
+  };
 
-      // Si estoy en llamada privada, ignoro el evento
-      if (isUserInPrivateCall) {
-        console.log("HomePage: In private call, ignoring 'general-broadcaster-ready'.");
-        setIsLoadingGeneralStream(false);
-        return;
-      }
+  // 4) Suscribir eventos
+  socket.on('general-broadcaster-ready', onGeneralBroadcasterReady);
+  socket.on('general-stream-ended', onGeneralStreamEnded);
+  socket.on('general-broadcaster-disconnected', onGeneralStreamEnded);
 
-      // Si cambió el broadcaster (nuevo stream), me registro UNA vez
-      if (broadcasterId !== currentBroadcasterId) {
-        setCurrentBroadcasterId(broadcasterId);
-        setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-        setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
-        setIsGeneralStreamLive(true);
-        setGeneralStreamWebRtcError(null);
+  // 5) Cleanup al desmontar o cambiar dependencias
+  return () => {
+    socket.off('connect');
+    socket.off('connect_error');
+    socket.off('disconnect');
+    socket.off('general-broadcaster-ready', onGeneralBroadcasterReady);
+    socket.off('general-stream-ended', onGeneralStreamEnded);
+    socket.off('general-broadcaster-disconnected', onGeneralStreamEnded);
+  };
+}, [
+  socket,
+  currentBroadcasterId,
+  isUserInPrivateCall,
+  loggedInUserId,
+  siteSettings,
+  t,
+  handleEndPrivateCall
+]);
 
-        // ─── Re-registrar como viewer solo la primera vez para este broadcasterId ───
-        if (socket && socket.connected) {
-          console.log("HomePage: Re-registrando como viewer tras 'general-broadcaster-ready'.");
-          socket.emit("register-general-viewer");
-        }
-      } else {
-        console.log("HomePage: Ya me re-registré para este broadcasterId, ignoro.");
-      }
-    };
 
     const onGeneralStreamEnded = () => {
       console.log("HomePage: 'general-stream-ended' received.");
