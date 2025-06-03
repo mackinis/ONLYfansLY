@@ -29,25 +29,25 @@ export default function LiveStreamAdminPage() {
   const [isGeneralStreamActive, setIsGeneralStreamActive] = useState(false);
   const [currentGeneralStreamTitle, setCurrentGeneralStreamTitle] = useState('');
   const [currentGeneralStreamSubtitle, setCurrentGeneralStreamSubtitle] = useState('');
-  const localStreamRef = useRef<MediaStream | null>(null); // For general stream camera
-  const localVideoRef = useRef<HTMLVideoElement>(null); // Preview for admin's general stream
+  const [adminLocalStreamForGeneral, setAdminLocalStreamForGeneral] = useState<MediaStream | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const [generalStreamViewerCount, setGeneralStreamViewerCount] = useState(0);
 
   // Private Bi-directional Call States
   const [isPrivateCallActive, setIsPrivateCallActive] = useState(false);
   const [privateCallStatus, setPrivateCallStatus] = useState<string>('');
-  const [adminLocalStreamForCall, setAdminLocalStreamForCall] = useState<MediaStream | null>(null); // Admin's own stream for the call (PiP & sending)
-  const [privateCallRemoteStream, setPrivateCallRemoteStream] = useState<MediaStream | null>(null); // User's stream received by admin
-  const remoteVideoRef = useRef<HTMLVideoElement>(null); // Main video for user's stream
-  const localPipVideoRef = useRef<HTMLVideoElement>(null); // Admin's PiP during call
+  const [adminLocalStreamForCall, setAdminLocalStreamForCall] = useState<MediaStream | null>(null);
+  const [privateCallRemoteStream, setPrivateCallRemoteStream] = useState<MediaStream | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localPipVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionForCallRef = useRef<RTCPeerConnection | null>(null);
   const [authorizedUserForStream, setAuthorizedUserForStream] = useState<UserProfile | null>(null);
   const [isLoadingAuthorizedUser, setIsLoadingAuthorizedUser] = useState(false);
   const [isAuthorizedUserConnected, setIsAuthorizedUserConnected] = useState(false);
   const [authorizedUserSocketIdForCall, setAuthorizedUserSocketIdForCall] = useState<string | null>(null);
 
-  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null); // General camera permission status
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
 
   const [localDefaultStreamTitle, setLocalDefaultStreamTitle] = useState('');
   const [localOfflineMessage, setLocalOfflineMessage] = useState('');
@@ -56,6 +56,7 @@ export default function LiveStreamAdminPage() {
 
   const [isMicrophoneMuted, setIsMicrophoneMuted] = useState(false);
   const [isLocalPreviewAudioMuted, setIsLocalPreviewAudioMuted] = useState(true);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
 
 
   useEffect(() => {
@@ -73,6 +74,7 @@ export default function LiveStreamAdminPage() {
   }, []);
 
   const fetchAuthorizedUserData = useCallback(async (userId: string) => {
+    console.log("AdminLiveStream: fetchAuthorizedUserData called for userId:", userId);
     if (!userId) {
       setAuthorizedUserForStream(null);
       setIsAuthorizedUserConnected(false);
@@ -86,6 +88,7 @@ export default function LiveStreamAdminPage() {
       const userProfile: UserProfile = await response.json();
       setAuthorizedUserForStream(userProfile);
       if (socket && socket.connected) {
+        console.log("AdminLiveStream: Requesting authorized user status via socket for:", userId);
         socket.emit('request-authorized-user-status', { targetUserAppId: userId });
       }
     } catch (error) {
@@ -103,7 +106,8 @@ export default function LiveStreamAdminPage() {
       setLocalDefaultStreamTitle(siteSettings.liveStreamDefaultTitle || t('adminLivestream.defaultStreamTitle'));
       setLocalOfflineMessage(siteSettings.liveStreamOfflineMessage || t('adminLivestream.defaultOfflineMessage'));
       setLocalLiveStreamForLoggedInOnly(siteSettings.liveStreamForLoggedInUsersOnly || false);
-
+      setCurrentGeneralStreamTitle(siteSettings.liveStreamDefaultTitle || ''); // Persist "Current Live Stream Title"
+      
       if (siteSettings.liveStreamAuthorizedUserId && siteSettings.liveStreamAuthorizedUserId !== authorizedUserForStream?.id) {
         fetchAuthorizedUserData(siteSettings.liveStreamAuthorizedUserId);
       } else if (!siteSettings.liveStreamAuthorizedUserId) {
@@ -117,18 +121,21 @@ export default function LiveStreamAdminPage() {
   const handleEndPrivateCall = useCallback((emitToServer = true, reason = "Admin ended call") => {
     console.log(`AdminLiveStream: Ending private call. Emit to server: ${emitToServer}. Reason: ${reason}`);
     if (peerConnectionForCallRef.current) {
+      console.log("AdminLiveStream: Closing existing peerConnectionForCallRef for private call.");
       peerConnectionForCallRef.current.close();
       peerConnectionForCallRef.current = null;
     }
-    adminLocalStreamForCall?.getTracks().forEach(track => track.stop()); // Stop tracks from state
-    setAdminLocalStreamForCall(null); // Clear state for PiP & sending
+    adminLocalStreamForCall?.getTracks().forEach(track => track.stop());
+    setAdminLocalStreamForCall(null);
 
     if (localPipVideoRef.current) localPipVideoRef.current.srcObject = null;
-    setPrivateCallRemoteStream(null); // Clear remote stream state
+    setPrivateCallRemoteStream(null);
 
     if (socket && socket.connected && emitToServer && authorizedUserSocketIdForCall) {
+      console.log("AdminLiveStream: Emitting 'admin-end-private-call' to userSocketId:", authorizedUserSocketIdForCall);
       socket.emit('admin-end-private-call', { userSocketId: authorizedUserSocketIdForCall });
     } else if (socket && socket.connected && emitToServer && !authorizedUserSocketIdForCall && siteSettings?.liveStreamAuthorizedUserId) {
+      console.log("AdminLiveStream: Emitting 'admin-end-private-call-for-user-app-id' to targetUserAppId:", siteSettings.liveStreamAuthorizedUserId);
       socket.emit('admin-end-private-call-for-user-app-id', { targetUserAppId: siteSettings.liveStreamAuthorizedUserId });
     }
 
@@ -136,6 +143,7 @@ export default function LiveStreamAdminPage() {
     setPrivateCallStatus(t('adminLivestream.privateCall.statusEnded'));
     setHasCameraPermission(null);
     setIsMicrophoneMuted(false);
+    setIsLoadingVideo(false);
   }, [socket, authorizedUserSocketIdForCall, siteSettings?.liveStreamAuthorizedUserId, t, adminLocalStreamForCall]);
 
 
@@ -144,9 +152,10 @@ export default function LiveStreamAdminPage() {
       if (socket) { socket.disconnect(); setSocket(null); }
       return;
     }
+    console.log("AdminLiveStream: Initializing socket connection with adminAppUserId:", adminAppUserId);
     const newSocket = io({ path: '/api/socket_io', query: { appUserId: adminAppUserId }});
     setSocket(newSocket);
-    return () => { newSocket.disconnect(); setSocket(null); };
+    return () => { console.log("AdminLiveStream: Disconnecting socket."); newSocket.disconnect(); setSocket(null); };
   }, [adminAppUserId, isLoadingSettings]);
 
   useEffect(() => {
@@ -164,42 +173,60 @@ export default function LiveStreamAdminPage() {
       toast({ variant: 'destructive', title: 'Socket Connection Error', description: `Admin: ${error.message}` });
     };
     const onDisconnect = (reason: Socket.DisconnectReason) => {
-      console.log(`AdminLiveStream: Socket disconnected from server. Reason: ${reason}. Socket ID: ${socket.id}`);
+      console.log(`AdminLiveStream: Socket disconnected. Reason: ${reason}. WasGeneralBroadcaster: ${socket.data.isGeneralBroadcaster}, WasAdminForCall: ${adminForPrivateCall?.socketId === socket.id}`);
       if (reason !== 'io client disconnect') {
         toast({ variant: 'destructive', title: t('adminLivestream.toast.socketDisconnectedTitle'), description: `${t('adminLivestream.toast.socketDisconnectedStreamInterrupt')} Reason: ${reason}` });
       }
       peerConnectionsRef.current.forEach(pc => pc.close());
       peerConnectionsRef.current.clear();
       setGeneralStreamViewerCount(0);
-      if (isPrivateCallActive) handleEndPrivateCall(false, "Admin socket disconnected");
+      if (socket.data.isGeneralBroadcaster) {
+          setIsGeneralStreamActive(false);
+          setAdminLocalStreamForGeneral(null);
+      }
+      if (isPrivateCallActive && adminForPrivateCall?.socketId === socket.id) {
+          handleEndPrivateCall(false, "Admin socket disconnected");
+      }
     };
     const onNewGeneralViewer = ({ viewerId }: { viewerId: string }) => {
+      console.log("AdminLiveStream: 'new-general-viewer' received from viewerId:", viewerId);
       setGeneralStreamViewerCount(prev => prev + 1);
-      if (isGeneralStreamActive && localStreamRef.current && socket && socket.connected) {
-        initiateWebRTCForGeneralViewer(viewerId, localStreamRef.current, socket);
+      if (isGeneralStreamActive && adminLocalStreamForGeneral && socket && socket.connected) {
+        console.log("AdminLiveStream: Initiating WebRTC for new general viewer:", viewerId);
+        initiateWebRTCForGeneralViewer(viewerId, adminLocalStreamForGeneral, socket);
+      } else {
+        console.log("AdminLiveStream: Conditions not met to initiate WebRTC for new viewer. isGeneralStreamActive:", isGeneralStreamActive, "adminLocalStreamForGeneral:", !!adminLocalStreamForGeneral);
       }
     };
     const onAnswerFromGeneralViewer = async ({ viewerId, answer }: { viewerId: string, answer: RTCSessionDescriptionInit }) => {
+      console.log("AdminLiveStream: 'answer-from-general-viewer' received from viewerId:", viewerId);
       const pc = peerConnectionsRef.current.get(viewerId);
       if (pc && pc.signalingState === 'have-local-offer') {
-        try { await pc.setRemoteDescription(new RTCSessionDescription(answer)); }
+        try { await pc.setRemoteDescription(new RTCSessionDescription(answer)); console.log("AdminLiveStream: Remote description (answer) set for viewer:", viewerId); }
         catch (error: any) { console.error('AdminLiveStream: Error setting remote description for general viewer:', viewerId, error.message); }
+      } else {
+        console.log("AdminLiveStream: Could not set remote description for general viewer. PC not found or state not 'have-local-offer'. PC State:", pc?.signalingState);
       }
     };
     const onCandidateFromGeneralViewer = async ({ viewerId, candidate }: { viewerId: string, candidate: RTCIceCandidateInit }) => {
+      console.log("AdminLiveStream: 'candidate-from-general-viewer' received from viewerId:", viewerId);
       const pc = peerConnectionsRef.current.get(viewerId);
       if (pc && candidate && pc.remoteDescription) {
-        try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
+        try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); console.log("AdminLiveStream: ICE candidate added from general viewer:", viewerId); }
         catch (error: any) { console.error('AdminLiveStream: Error adding ICE candidate from general viewer:', viewerId, candidate, error.message); }
+      } else {
+        console.log("AdminLiveStream: Could not add ICE candidate from general viewer. PC not found, no remoteDescription, or candidate null.");
       }
     };
     const onViewerDisconnected = ({ viewerId }: { viewerId: string }) => {
+        console.log("AdminLiveStream: 'viewer-disconnected' event for viewerId:", viewerId);
         const pc = peerConnectionsRef.current.get(viewerId);
         if (pc) pc.close();
         peerConnectionsRef.current.delete(viewerId);
         setGeneralStreamViewerCount(prev => Math.max(0, prev -1));
     };
     const onAuthorizedUserStatus = ({ userId, isConnected, userSocketId }: { userId: string, isConnected: boolean, userSocketId: string | null }) => {
+      console.log("AdminLiveStream: 'authorized-user-status' received:", { userId, isConnected, userSocketId });
       if (siteSettings?.liveStreamAuthorizedUserId === userId) {
         setIsAuthorizedUserConnected(isConnected);
         setAuthorizedUserSocketIdForCall(isConnected ? userSocketId : null);
@@ -210,30 +237,42 @@ export default function LiveStreamAdminPage() {
       }
     };
     const onPrivateCallUserReadyForOffer = ({ userSocketId, userAppUserId }: { userSocketId: string, userAppUserId: string }) => {
-      if (userAppUserId === siteSettings?.liveStreamAuthorizedUserId && isPrivateCallActive && adminLocalStreamForCall && socket && socket.connected) { // Check adminLocalStreamForCall state
+      console.log("AdminLiveStream: 'private-call-user-ready-for-offer' received:", { userSocketId, userAppUserId });
+      if (userAppUserId === siteSettings?.liveStreamAuthorizedUserId && isPrivateCallActive && adminLocalStreamForCall && socket && socket.connected) {
           setAuthorizedUserSocketIdForCall(userSocketId);
+          console.log("AdminLiveStream: Initiating WebRTC private call offer to userSocketId:", userSocketId);
           initiateWebRTCPrivateCallOffer(userSocketId, socket);
+      } else {
+         console.log("AdminLiveStream: Conditions not met for 'private-call-user-ready-for-offer'. isPrivateCallActive:", isPrivateCallActive, "adminLocalStreamForCall:", !!adminLocalStreamForCall);
       }
     };
     const onPrivateSdpAnswerReceived = async ({ senderSocketId, answer }: { senderSocketId: string, answer: RTCSessionDescriptionInit }) => {
+      console.log("AdminLiveStream: 'private-sdp-answer-received' from senderSocketId:", senderSocketId);
       if (peerConnectionForCallRef.current && senderSocketId === authorizedUserSocketIdForCall && peerConnectionForCallRef.current.signalingState === 'have-local-offer') {
         try {
           await peerConnectionForCallRef.current.setRemoteDescription(new RTCSessionDescription(answer));
           setPrivateCallStatus(t('adminLivestream.privateCall.statusConnected', { userName: authorizedUserForStream?.name || 'User' }));
+          console.log("AdminLiveStream: Remote description (answer) set for private call.");
         } catch (error: any) {
           console.error('AdminLiveStream: Error setting remote description from private call answer:', error.message);
           setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed'));
           handleEndPrivateCall(false, "Error setting remote description (answer)");
         }
+      } else {
+        console.log("AdminLiveStream: Could not set remote description for private call. PC not found, state not 'have-local-offer', or senderSocketId mismatch. PC State:", peerConnectionForCallRef.current?.signalingState);
       }
     };
     const onPrivateIceCandidateReceived = async ({ senderSocketId, candidate }: { senderSocketId: string, candidate: RTCIceCandidateInit }) => {
+      console.log("AdminLiveStream: 'private-ice-candidate-received' from senderSocketId:", senderSocketId);
       if (peerConnectionForCallRef.current && senderSocketId === authorizedUserSocketIdForCall && candidate && peerConnectionForCallRef.current.remoteDescription) {
-        try { await peerConnectionForCallRef.current.addIceCandidate(new RTCIceCandidate(candidate)); }
+        try { await peerConnectionForCallRef.current.addIceCandidate(new RTCIceCandidate(candidate)); console.log("AdminLiveStream: ICE candidate added for private call from user."); }
         catch (error: any) { console.error('AdminLiveStream: Error adding received ICE candidate for private call:', candidate, error.message); }
+      } else {
+        console.log("AdminLiveStream: Could not add ICE candidate for private call. PC not found, no remoteDescription, candidate null, or senderSocketId mismatch.");
       }
     };
     const onPrivateCallUserDisconnected = ({ userSocketId }: { userSocketId: string }) => {
+        console.log("AdminLiveStream: 'private-call-user-disconnected' event for userSocketId:", userSocketId);
         if (userSocketId === authorizedUserSocketIdForCall && isPrivateCallActive) {
             toast({ title: t('adminLivestream.privateCall.callEndedTitle'), description: t('adminLivestream.toast.callUserDisconnected'), variant: 'default'});
             handleEndPrivateCall(false, "Private call user disconnected event received by admin");
@@ -281,110 +320,200 @@ export default function LiveStreamAdminPage() {
       socket.off('private-call-error', onPrivateCallError);
       socket.off('general-stream-error', onGeneralStreamError);
     };
-  }, [socket, siteSettings, isGeneralStreamActive, isPrivateCallActive, authorizedUserForStream, authorizedUserSocketIdForCall, t, handleEndPrivateCall, adminLocalStreamForCall]);
+  }, [socket, siteSettings, isGeneralStreamActive, isPrivateCallActive, authorizedUserForStream, authorizedUserSocketIdForCall, t, handleEndPrivateCall, adminLocalStreamForGeneral, adminLocalStreamForCall]);
 
 
   const getCameraPermission = async (forCall = false): Promise<MediaStream | null> => {
+    console.log("AdminLiveStream: getCameraPermission called. forCall:", forCall);
     if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
       setHasCameraPermission(false);
       toast({ variant: 'destructive', title: t('adminLivestream.toast.unsupportedBrowserTitle'), description: t('adminLivestream.toast.unsupportedBrowserDescription') });
-      if (forCall) setAdminLocalStreamForCall(null);
+      if (forCall) setAdminLocalStreamForCall(null); else setAdminLocalStreamForGeneral(null);
       return null;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      console.log("AdminLiveStream: Camera permission granted. Stream ID:", stream.id);
       setHasCameraPermission(true);
       stream.getAudioTracks().forEach(track => track.enabled = !isMicrophoneMuted);
 
       if (forCall) {
-        setAdminLocalStreamForCall(stream); // Set state for PiP and for sending tracks
+        setAdminLocalStreamForCall(stream);
       } else {
-        localStreamRef.current = stream; // Keep using ref for general stream's source video element directly
+        setAdminLocalStreamForGeneral(stream);
       }
       return stream;
     } catch (error: any) {
+      console.error("AdminLiveStream: Error getting camera permission:", error);
       setHasCameraPermission(false);
       toast({ variant: 'destructive', title: t('adminLivestream.toast.cameraAccessDeniedTitle'), description: t('adminLivestream.toast.cameraAccessDeniedDescription')});
-      if (forCall) setAdminLocalStreamForCall(null);
+      if (forCall) setAdminLocalStreamForCall(null); else setAdminLocalStreamForGeneral(null);
       return null;
     }
   };
 
   const initiateWebRTCForGeneralViewer = async (viewerId: string, stream: MediaStream, currentSocket: Socket) => {
-    if (!currentSocket || !currentSocket.connected) return;
-    if (peerConnectionsRef.current.has(viewerId)) peerConnectionsRef.current.get(viewerId)?.close();
+    console.log("AdminLiveStream: initiateWebRTCForGeneralViewer for viewerId:", viewerId);
+    if (!currentSocket || !currentSocket.connected) { console.log("AdminLiveStream: Socket not connected, cannot initiate WebRTC for general viewer."); return; }
+    
+    if (peerConnectionsRef.current.has(viewerId)) {
+        const oldPc = peerConnectionsRef.current.get(viewerId);
+        if (oldPc && oldPc.signalingState !== 'closed') {
+            console.log("AdminLiveStream: Closing existing PC for general viewer:", viewerId);
+            oldPc.close();
+        }
+    }
     const pc = new RTCPeerConnection(PC_CONFIG);
+    console.log("AdminLiveStream: New RTCPeerConnection created for general viewer:", viewerId);
     peerConnectionsRef.current.set(viewerId, pc);
-    stream.getTracks().forEach(track => { try { pc.addTrack(track, stream); } catch (e: any) { console.error("Error adding track to PC for viewer", viewerId, track.kind, e.message); }});
-    pc.onicecandidate = (event) => { if (event.candidate && currentSocket.connected) { try { currentSocket.emit('general-stream-candidate-to-viewer', { viewerId, candidate: event.candidate }); } catch (e:any) { console.error("Error emitting ICE to viewer:", e.message);}} };
-    pc.onconnectionstatechange = () => { if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) { pc.close(); peerConnectionsRef.current.delete(viewerId); setGeneralStreamViewerCount(prev => Math.max(0, prev -1)); }};
+    
+    stream.getTracks().forEach(track => { try { pc.addTrack(track, stream); } catch (e: any) { console.error("AdminLiveStream: Error adding track to PC for general viewer", viewerId, track.kind, e.message); }});
+    
+    pc.onicecandidate = (event) => { 
+        if (event.candidate && currentSocket.connected) { 
+            console.log("AdminLiveStream: Sending ICE candidate to general viewer:", viewerId);
+            try { currentSocket.emit('general-stream-candidate-to-viewer', { viewerId, candidate: event.candidate }); } 
+            catch (e:any) { console.error("AdminLiveStream: Error emitting ICE to general viewer:", e.message);}
+        } 
+    };
+    pc.onconnectionstatechange = () => { 
+        console.log(`AdminLiveStream: General viewer ${viewerId} PC connection state changed to: ${pc.connectionState}`);
+        if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) { 
+            pc.close(); 
+            peerConnectionsRef.current.delete(viewerId); 
+            setGeneralStreamViewerCount(prev => Math.max(0, prev -1)); 
+            console.log("AdminLiveStream: General viewer connection closed/failed, removed PC for:", viewerId);
+        }
+    };
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      if (currentSocket.connected) currentSocket.emit('general-stream-offer-to-viewer', { viewerId, offer });
-    } catch (error: any) { console.error('Error creating/sending offer to general viewer:', viewerId, error.message); }
+      if (currentSocket.connected) {
+        console.log("AdminLiveStream: Sending offer to general viewer:", viewerId);
+        currentSocket.emit('general-stream-offer-to-viewer', { viewerId, offer });
+      } else {
+        console.log("AdminLiveStream: Socket disconnected before sending offer to general viewer:", viewerId);
+      }
+    } catch (error: any) { console.error('AdminLiveStream: Error creating/sending offer to general viewer:', viewerId, error.message); }
   };
 
   const handleToggleGeneralStreaming = async () => {
+    console.log("AdminLiveStream: handleToggleGeneralStreaming called. Current state - isGeneralStreamActive:", isGeneralStreamActive);
     if (!socket) { toast({ title: t('adminLivestream.toast.errorTitle'), description: t('adminLivestream.toast.socketNotConnectedError'), variant: 'destructive' }); return; }
     if (isPrivateCallActive) { toast({ title: "Action Denied", description: "Cannot manage general stream while in a private call. Please end the call first.", variant: "destructive"}); return; }
 
+    setIsLoadingVideo(true);
+
     if (isGeneralStreamActive) {
-      localStreamRef.current?.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
+      console.log("AdminLiveStream: Stopping general stream.");
+      adminLocalStreamForGeneral?.getTracks().forEach(track => track.stop());
+      setAdminLocalStreamForGeneral(null);
       if (localVideoRef.current) localVideoRef.current.srcObject = null;
       peerConnectionsRef.current.forEach(pc => pc.close());
       peerConnectionsRef.current.clear();
       setGeneralStreamViewerCount(0);
       if (socket.connected) socket.emit('stop-general-stream');
       setIsGeneralStreamActive(false);
+      socket.data.isGeneralBroadcaster = false;
       setHasCameraPermission(null);
       toast({ title: t('adminLivestream.toast.streamStoppedTitle'), description: t('adminLivestream.toast.streamStoppedDescription') });
+      setIsLoadingVideo(false);
     } else {
-      if (!currentGeneralStreamTitle.trim()) { toast({ title: "Stream Title Required", description: "Please enter a title for the live stream.", variant: "destructive"}); return; }
-      const stream = await getCameraPermission(false);
+      if (!currentGeneralStreamTitle.trim()) { 
+          toast({ title: "Stream Title Required", description: "Please enter a title for the live stream.", variant: "destructive"}); 
+          setIsLoadingVideo(false);
+          return; 
+      }
+      console.log("AdminLiveStream: Starting general stream.");
+      const stream = await getCameraPermission(false); // Sets adminLocalStreamForGeneral
       if (stream) {
-        // localStreamRef.current is set by getCameraPermission
         if (socket.connected) {
             socket.emit('register-general-broadcaster', { streamTitle: currentGeneralStreamTitle, streamSubtitle: currentGeneralStreamSubtitle });
+            socket.data.isGeneralBroadcaster = true;
+            console.log("AdminLiveStream: 'register-general-broadcaster' emitted.");
         } else {
             toast({ title: t('adminLivestream.toast.errorTitle'), description: "Socket not connected. Cannot start stream.", variant: 'destructive'});
-            stream.getTracks().forEach(track => track.stop()); localStreamRef.current = null;
-            if (localVideoRef.current) localVideoRef.current.srcObject = null; setHasCameraPermission(null); return;
+            stream.getTracks().forEach(track => track.stop()); setAdminLocalStreamForGeneral(null);
+            if (localVideoRef.current) localVideoRef.current.srcObject = null; setHasCameraPermission(null); 
+            setIsLoadingVideo(false);
+            return;
         }
         setIsGeneralStreamActive(true);
         let streamTypeInfo = siteSettings?.liveStreamForLoggedInUsersOnly ? t('adminLivestream.toast.loggedInOnlyStreamInfo') : t('adminLivestream.toast.publicStreamInfo');
         toast({ title: t('adminLivestream.toast.streamStartingTitle'), description: streamTypeInfo });
-      } else { setIsGeneralStreamActive(false); }
+        // setIsLoadingVideo(false); // isLoadingVideo will be set by localVideoRef useEffect
+      } else { 
+          setIsGeneralStreamActive(false); 
+          setIsLoadingVideo(false);
+      }
     }
   };
 
   const initiateWebRTCPrivateCallOffer = async (targetUserSocketId: string, currentSocket: Socket) => {
-    if (!currentSocket || !currentSocket.connected || !adminLocalStreamForCall) { setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Internal Error)"); return; }
-    if (peerConnectionForCallRef.current && peerConnectionForCallRef.current.signalingState !== 'closed') peerConnectionForCallRef.current.close();
+    console.log("AdminLiveStream: initiateWebRTCPrivateCallOffer to targetUserSocketId:", targetUserSocketId);
+    if (!currentSocket || !currentSocket.connected || !adminLocalStreamForCall) { 
+        console.error("AdminLiveStream: Cannot initiate private call offer. Socket/stream missing. adminLocalStreamForCall:", !!adminLocalStreamForCall);
+        setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Internal Error)"); return; 
+    }
     
+    if (peerConnectionForCallRef.current && peerConnectionForCallRef.current.signalingState !== 'closed') {
+        console.log("AdminLiveStream: Closing existing peerConnectionForCallRef before creating new one for private call offer.");
+        peerConnectionForCallRef.current.close();
+    }
     peerConnectionForCallRef.current = new RTCPeerConnection(PC_CONFIG);
+    console.log("AdminLiveStream: New RTCPeerConnection created for private call offer.");
     
-    adminLocalStreamForCall.getTracks().forEach(track => { // Use state variable here
-        try { peerConnectionForCallRef.current!.addTrack(track, adminLocalStreamForCall); } 
-        catch (e:any) { console.error("Error adding admin's local track to private PC:", track.kind, e.message); }
+    adminLocalStreamForCall.getTracks().forEach(track => {
+        try { peerConnectionForCallRef.current!.addTrack(track, adminLocalStreamForCall); console.log("AdminLiveStream: Added local track to private call PC:", track.kind); } 
+        catch (e:any) { console.error("AdminLiveStream: Error adding admin's local track to private PC:", track.kind, e.message); }
     });
 
-    peerConnectionForCallRef.current.onicecandidate = (event) => { if (event.candidate && currentSocket.connected) { try { currentSocket.emit('private-ice-candidate', { targetSocketId: targetUserSocketId, candidate: event.candidate }); } catch (e:any) { console.error("Error emitting private ICE:", e.message); }}};
-    peerConnectionForCallRef.current.ontrack = (event) => { if (event.streams[0]) setPrivateCallRemoteStream(event.streams[0]); else setPrivateCallRemoteStream(null); };
-    peerConnectionForCallRef.current.onconnectionstatechange = () => { if(peerConnectionForCallRef.current) { const state = peerConnectionForCallRef.current.connectionState; if (state === 'connected') setPrivateCallStatus(t('adminLivestream.privateCall.statusConnected', { userName: authorizedUserForStream?.name || 'User' })); else if (['failed', 'disconnected', 'closed'].includes(state)) { if (isPrivateCallActive) handleEndPrivateCall(false, `PC state changed to ${state}`); }}};
+    peerConnectionForCallRef.current.onicecandidate = (event) => { 
+        if (event.candidate && currentSocket.connected) { 
+            console.log("AdminLiveStream: Sending private ICE candidate to user:", targetUserSocketId);
+            try { currentSocket.emit('private-ice-candidate', { targetSocketId: targetUserSocketId, candidate: event.candidate }); } 
+            catch (e:any) { console.error("AdminLiveStream: Error emitting private ICE:", e.message); }
+        }
+    };
+    peerConnectionForCallRef.current.ontrack = (event) => { 
+        console.log("AdminLiveStream: Private call 'ontrack' event from user. Streams:", event.streams);
+        if (event.streams[0]) setPrivateCallRemoteStream(event.streams[0]); 
+        else { setPrivateCallRemoteStream(null); console.log("AdminLiveStream: Private call 'ontrack' event but no stream[0].");}
+    };
+    peerConnectionForCallRef.current.onconnectionstatechange = () => { 
+        if(peerConnectionForCallRef.current) { 
+            const state = peerConnectionForCallRef.current.connectionState; 
+            console.log(`AdminLiveStream: Private call PC connection state changed to: ${state}`);
+            if (state === 'connected') {
+                setPrivateCallStatus(t('adminLivestream.privateCall.statusConnected', { userName: authorizedUserForStream?.name || 'User' }));
+                setIsLoadingVideo(false);
+            } else if (['failed', 'disconnected', 'closed'].includes(state)) { 
+                if (isPrivateCallActive) handleEndPrivateCall(false, `PC state changed to ${state}`); 
+            }
+        }
+    };
     
     try {
       const offer = await peerConnectionForCallRef.current.createOffer();
       await peerConnectionForCallRef.current.setLocalDescription(offer);
-      if (currentSocket.connected) { currentSocket.emit('private-sdp-offer', { targetSocketId: targetUserSocketId, offer }); setPrivateCallStatus(t('adminLivestream.privateCall.statusConnecting', { userName: authorizedUserForStream?.name || 'User' }));
-      } else { setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Socket Disconnected)"); handleEndPrivateCall(false, "Socket disconnected before sending offer"); }
+      if (currentSocket.connected) { 
+        currentSocket.emit('private-sdp-offer', { targetSocketId: targetUserSocketId, offer }); 
+        setPrivateCallStatus(t('adminLivestream.privateCall.statusConnecting', { userName: authorizedUserForStream?.name || 'User' }));
+        console.log("AdminLiveStream: Private call SDP offer sent to user:", targetUserSocketId);
+      } else { 
+        setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Socket Disconnected)"); 
+        handleEndPrivateCall(false, "Socket disconnected before sending offer"); 
+      }
     } catch (error: any) {
-      console.error("Error creating/sending private call offer:", error.message); setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed')); toast({ variant: 'destructive', title: 'WebRTC Error', description: `Failed to create private call offer. Err: ${error.message}` }); handleEndPrivateCall(false, "Error creating/sending offer");
+      console.error("AdminLiveStream: Error creating/sending private call offer:", error.message); 
+      setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed')); 
+      toast({ variant: 'destructive', title: 'WebRTC Error', description: `Failed to create private call offer. Err: ${error.message}` }); 
+      handleEndPrivateCall(false, "Error creating/sending offer");
     }
   };
 
   const handleStartPrivateCall = async () => {
+    console.log("AdminLiveStream: handleStartPrivateCall called.");
     if (!socket) { toast({ title: t('adminLivestream.toast.errorTitle'), description: t('adminLivestream.toast.socketNotConnectedError'), variant: "destructive" }); return; }
     if (!siteSettings?.liveStreamAuthorizedUserId) { toast({ title: t('adminLivestream.privateCall.cannotStartTitle'), description: "No user is authorized for private calls in site settings.", variant: "destructive" }); return; }
     if (!isAuthorizedUserConnected || !authorizedUserSocketIdForCall) { toast({ title: t('adminLivestream.privateCall.cannotStartTitle'), description: t('adminLivestream.privateCall.noUserConnected'), variant: "destructive" }); return; }
@@ -392,21 +521,28 @@ export default function LiveStreamAdminPage() {
     if (isPrivateCallActive) return;
 
     setIsPrivateCallActive(true);
+    setIsLoadingVideo(true);
     setPrivateCallStatus(t('adminLivestream.privateCall.statusConnecting', { userName: authorizedUserForStream?.name || 'User' }));
-    const stream = await getCameraPermission(true); // This will set adminLocalStreamForCall state
-    if (stream) { // adminLocalStreamForCall state is now set by getCameraPermission
-      if (socket.connected) socket.emit('admin-initiate-private-call-request', { targetUserAppId: siteSettings.liveStreamAuthorizedUserId });
-      else {
-        setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Socket Error)"); setIsPrivateCallActive(false); stream.getTracks().forEach(track => track.stop());
-        setAdminLocalStreamForCall(null); // Clear state on error
+    const stream = await getCameraPermission(true);
+    if (stream) {
+      if (socket.connected) {
+          console.log("AdminLiveStream: Emitting 'admin-initiate-private-call-request' to targetUserAppId:", siteSettings.liveStreamAuthorizedUserId);
+          socket.emit('admin-initiate-private-call-request', { targetUserAppId: siteSettings.liveStreamAuthorizedUserId });
+      } else {
+        setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Socket Error)"); 
+        setIsPrivateCallActive(false); setIsLoadingVideo(false);
+        stream.getTracks().forEach(track => track.stop()); setAdminLocalStreamForCall(null);
         setHasCameraPermission(null);
       }
-    } else { setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Camera/Mic Error)"); setIsPrivateCallActive(false); }
+    } else { 
+        setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Camera/Mic Error)"); 
+        setIsPrivateCallActive(false); setIsLoadingVideo(false);
+    }
   };
 
-  const handleSaveChanges = async () => { setIsSubmittingSettings(true); try { const response = await fetch('/api/site-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ liveStreamDefaultTitle: localDefaultStreamTitle, liveStreamOfflineMessage: localOfflineMessage, liveStreamForLoggedInUsersOnly: localLiveStreamForLoggedInOnly, liveStreamAuthorizedUserId: siteSettings?.liveStreamAuthorizedUserId }) }); const result = await response.json(); if (response.ok) { toast({ title: t('adminLivestream.toast.settingsSavedTitle'), description: result.message || t('adminLivestream.toast.persistentSettingsSavedDescription')}); await refreshSiteSettings(); } else { toast({ title: t('adminLivestream.toast.errorTitle'), description: result.message || t('adminLivestream.toast.genericError'), variant: "destructive" }); } } catch (error) { toast({ title: t('adminLivestream.toast.errorTitle'), description: t('adminLivestream.toast.genericError'), variant: "destructive" }); } finally { setIsSubmittingSettings(false); }};
+  const handleSaveChanges = async () => { setIsSubmittingSettings(true); try { const response = await fetch('/api/site-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ liveStreamDefaultTitle: currentGeneralStreamTitle, liveStreamOfflineMessage: localOfflineMessage, liveStreamForLoggedInUsersOnly: localLiveStreamForLoggedInOnly, liveStreamAuthorizedUserId: siteSettings?.liveStreamAuthorizedUserId }) }); const result = await response.json(); if (response.ok) { toast({ title: t('adminLivestream.toast.settingsSavedTitle'), description: result.message || t('adminLivestream.toast.persistentSettingsSavedDescription')}); await refreshSiteSettings(); } else { toast({ title: t('adminLivestream.toast.errorTitle'), description: result.message || t('adminLivestream.toast.genericError'), variant: "destructive" }); } } catch (error) { toast({ title: t('adminLivestream.toast.errorTitle'), description: t('adminLivestream.toast.genericError'), variant: "destructive" }); } finally { setIsSubmittingSettings(false); }};
   const toggleMicrophone = () => { 
-    const streamToToggle = isPrivateCallActive ? adminLocalStreamForCall : localStreamRef.current; // Use state for private call
+    const streamToToggle = isPrivateCallActive ? adminLocalStreamForCall : adminLocalStreamForGeneral;
     if (streamToToggle) { 
       const newMutedState = !isMicrophoneMuted; 
       streamToToggle.getAudioTracks().forEach(track => track.enabled = !newMutedState); 
@@ -416,32 +552,48 @@ export default function LiveStreamAdminPage() {
   };
   const toggleLocalPreviewAudio = () => { const videoEl = localVideoRef.current; if (videoEl && isGeneralStreamActive) { const newMutedState = !videoEl.muted; videoEl.muted = newMutedState; setIsLocalPreviewAudioMuted(newMutedState); toast({ title: t('adminLivestream.toast.localAudioStatusTitle'), description: newMutedState ? t('adminLivestream.toast.localAudioMuted') : t('adminLivestream.toast.localAudioUnmuted')}); }};
 
-
   useEffect(() => { // General stream local preview for admin
     const videoEl = localVideoRef.current;
     if (videoEl) {
-      if (isGeneralStreamActive && localStreamRef.current && !isPrivateCallActive) {
-        if (videoEl.srcObject !== localStreamRef.current) {
-          videoEl.srcObject = localStreamRef.current;
+      if (isGeneralStreamActive && adminLocalStreamForGeneral && !isPrivateCallActive) {
+        if (videoEl.srcObject !== adminLocalStreamForGeneral) {
+          console.log("AdminLiveStream (General Stream Preview Effect): Assigning adminLocalStreamForGeneral to localVideoRef.");
+          videoEl.srcObject = adminLocalStreamForGeneral;
           videoEl.muted = isLocalPreviewAudioMuted;
-          videoEl.play().catch(e => { if (e.name !== 'AbortError') console.error("Error playing general local video preview:", e); });
+          videoEl.onloadedmetadata = () => {
+            console.log("AdminLiveStream (General Stream Preview Effect): 'loadedmetadata' for localVideoRef.");
+            setIsLoadingVideo(false);
+            videoEl.play().catch(e => { if (e.name !== 'AbortError') console.error("AdminLiveStream: Error playing general local video preview:", e); });
+          };
+          videoEl.onerror = (e) => {
+            console.error("AdminLiveStream (General Stream Preview Effect): Video element error on localVideoRef.", e);
+            setIsLoadingVideo(false);
+          };
+        } else if (videoEl.paused && !isLoadingVideo) {
+           videoEl.play().catch(e => { if (e.name !== 'AbortError') console.error("AdminLiveStream: Error re-playing general local video preview:", e); });
         }
-      } else if (videoEl.srcObject && (!isGeneralStreamActive || isPrivateCallActive)) { // Clear if no longer in general stream or private call started
+      } else if (videoEl.srcObject && (!isGeneralStreamActive || isPrivateCallActive)) {
+        console.log("AdminLiveStream (General Stream Preview Effect): Clearing srcObject from localVideoRef.");
         videoEl.srcObject = null;
+        setIsLoadingVideo(false);
       }
     }
-  }, [isGeneralStreamActive, localStreamRef, isPrivateCallActive, isLocalPreviewAudioMuted]);
+  }, [isGeneralStreamActive, adminLocalStreamForGeneral, isPrivateCallActive, isLocalPreviewAudioMuted, isLoadingVideo]);
 
   useEffect(() => { // Admin's PiP during private call
     const videoEl = localPipVideoRef.current;
     if (videoEl) {
         if (isPrivateCallActive && adminLocalStreamForCall) {
             if (videoEl.srcObject !== adminLocalStreamForCall) {
+                console.log("AdminLiveStream (PiP Effect): Assigning adminLocalStreamForCall to localPipVideoRef.");
                 videoEl.srcObject = adminLocalStreamForCall;
                 videoEl.muted = true;
-                videoEl.play().catch(e => { if (e.name !== 'AbortError') console.error("AdminLiveStream: Error playing admin PiP video:", e); });
+                videoEl.onloadedmetadata = () => {
+                    videoEl.play().catch(e => { if (e.name !== 'AbortError') console.error("AdminLiveStream: Error playing admin PiP video:", e); });
+                }
             }
-        } else if (videoEl.srcObject) { // Clear if no longer in private call or stream removed
+        } else if (videoEl.srcObject) {
+            console.log("AdminLiveStream (PiP Effect): Clearing srcObject from localPipVideoRef.");
             videoEl.srcObject = null;
         }
     }
@@ -452,12 +604,26 @@ export default function LiveStreamAdminPage() {
     if (videoEl) {
       if (isPrivateCallActive && privateCallRemoteStream) {
         if (videoEl.srcObject !== privateCallRemoteStream) {
+          console.log("AdminLiveStream (Remote Video Effect): Assigning privateCallRemoteStream to remoteVideoRef.");
+          setIsLoadingVideo(true);
           videoEl.srcObject = privateCallRemoteStream;
-          videoEl.muted = false; // Admin should hear the remote user
-          videoEl.play().catch(e => { if (e.name !== 'AbortError') console.error("Error playing remote user video:", e); });
+          videoEl.muted = false;
+          videoEl.onloadedmetadata = () => {
+            console.log("AdminLiveStream (Remote Video Effect): 'loadedmetadata' for remoteVideoRef.");
+            videoEl.play().catch(e => { 
+                if (e.name !== 'AbortError') console.error("AdminLiveStream: Error playing remote user video:", e); 
+                setIsLoadingVideo(false);
+            }).finally(() => setIsLoadingVideo(false));
+          };
+           videoEl.onerror = (e) => {
+            console.error("AdminLiveStream (Remote Video Effect): Video element error on remoteVideoRef.", e);
+            setIsLoadingVideo(false);
+          };
         }
-      } else if (videoEl.srcObject) { // Clear if no longer in private call or remote stream removed
+      } else if (videoEl.srcObject) {
+        console.log("AdminLiveStream (Remote Video Effect): Clearing srcObject from remoteVideoRef.");
         videoEl.srcObject = null;
+        setIsLoadingVideo(false);
       }
     }
   }, [isPrivateCallActive, privateCallRemoteStream]);
@@ -467,37 +633,13 @@ export default function LiveStreamAdminPage() {
   }
 
   const canStartPrivateCall = !!(siteSettings?.liveStreamAuthorizedUserId && isAuthorizedUserConnected && authorizedUserSocketIdForCall && !isPrivateCallActive && !isGeneralStreamActive);
-  const isAnyStreamAttemptingOrActive = isGeneralStreamActive || isPrivateCallActive;
+  
+  let mainVideoPlayerElementRef = isPrivateCallActive ? remoteVideoRef : localVideoRef;
+  let mainVideoPlayerIsMuted = isPrivateCallActive ? false : isLocalPreviewAudioMuted;
+  let videoAreaTitle = isPrivateCallActive ? t('adminLivestream.remoteUserVideoLabel') : (currentGeneralStreamTitle || localDefaultStreamTitle || t('adminLivestream.videoArea.title'));
+  let videoAreaSubtitle = isPrivateCallActive ? privateCallStatus : (isGeneralStreamActive ? currentGeneralStreamSubtitle : '');
+  let showOfflineMessageInVideoArea = !isGeneralStreamActive && !isPrivateCallActive;
 
-  let mainVideoPlayerElementRef = localVideoRef;
-  let mainVideoPlayerSrcObject: MediaStream | null = null;
-  let mainVideoPlayerIsMuted = true;
-  let videoAreaTitle = currentGeneralStreamTitle || localDefaultStreamTitle || t('adminLivestream.videoArea.title');
-  let videoAreaSubtitle = isGeneralStreamActive ? currentGeneralStreamSubtitle : '';
-  let isLoadingStateForVideoArea = false;
-
-  if (isPrivateCallActive) {
-    mainVideoPlayerElementRef = remoteVideoRef; // Display remote user's stream in main view
-    mainVideoPlayerSrcObject = privateCallRemoteStream;
-    mainVideoPlayerIsMuted = false; // Admin should hear the remote user
-    videoAreaTitle = t('adminLivestream.remoteUserVideoLabel');
-    videoAreaSubtitle = '';
-    if (!privateCallRemoteStream && hasCameraPermission !== false && privateCallStatus === t('adminLivestream.privateCall.statusConnecting', { userName: authorizedUserForStream?.name || 'User' })) {
-      isLoadingStateForVideoArea = true;
-    }
-  } else if (isGeneralStreamActive) {
-    mainVideoPlayerElementRef = localVideoRef; // Display admin's own stream (preview)
-    mainVideoPlayerSrcObject = localStreamRef.current;
-    mainVideoPlayerIsMuted = isLocalPreviewAudioMuted;
-    if (!localStreamRef.current && hasCameraPermission === null) {
-      isLoadingStateForVideoArea = true;
-    }
-  } else if (isAnyStreamAttemptingOrActive && !mainVideoPlayerSrcObject && hasCameraPermission !== false && privateCallStatus !== t('adminLivestream.privateCall.statusFailed')) {
-    isLoadingStateForVideoArea = true; // Generic loading for attempt if no specific stream yet
-  }
-
-
-  console.log("AdminLiveStream Button State: isPrivateCallActive:", isPrivateCallActive, "isGeneralStreamActive:", isGeneralStreamActive, "currentGeneralStreamTitle:", `"${currentGeneralStreamTitle}"`, "Button Disabled:", (isPrivateCallActive || (!isGeneralStreamActive && !currentGeneralStreamTitle.trim())));
 
   return (
     <div className="space-y-8">
@@ -537,7 +679,8 @@ export default function LiveStreamAdminPage() {
                 />
                 <p className="text-xs text-muted-foreground mt-1">{t('adminLivestream.configCard.currentLiveSubtitleHelpText')}</p>
             </div>
-            <Button onClick={handleToggleGeneralStreaming} disabled={isPrivateCallActive || (!isGeneralStreamActive && !currentGeneralStreamTitle.trim())}>
+            <Button onClick={handleToggleGeneralStreaming} disabled={isLoadingVideo || isPrivateCallActive || (!isGeneralStreamActive && !currentGeneralStreamTitle.trim())}>
+                {(isLoadingVideo && !isGeneralStreamActive && !isPrivateCallActive) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isGeneralStreamActive ? <StopCircle className="mr-2 h-4 w-4"/> : <Radio className="mr-2 h-4 w-4"/>}
                 {isGeneralStreamActive ? t('adminLivestream.streamControlCard.stopStreamButton') : t('adminLivestream.streamControlCard.startStreamButton')}
             </Button>
@@ -571,7 +714,8 @@ export default function LiveStreamAdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button onClick={isPrivateCallActive ? () => handleEndPrivateCall(true, "Admin manually ended call") : handleStartPrivateCall} disabled={!canStartPrivateCall && !isPrivateCallActive}>
+          <Button onClick={isPrivateCallActive ? () => handleEndPrivateCall(true, "Admin manually ended call") : handleStartPrivateCall} disabled={isLoadingVideo || !canStartPrivateCall && !isPrivateCallActive}>
+            {(isLoadingVideo && !isPrivateCallActive) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isPrivateCallActive ? <PhoneOff className="mr-2 h-4 w-4"/> : <PhoneCall className="mr-2 h-4 w-4"/>}
             {isPrivateCallActive ? t('adminLivestream.endPrivateCallButton') : t('adminLivestream.startPrivateCallButton')}
           </Button>
@@ -603,27 +747,27 @@ export default function LiveStreamAdminPage() {
               </div>
             )}
 
-            {hasCameraPermission === false && isAnyStreamAttemptingOrActive && (
+            {hasCameraPermission === false && (isGeneralStreamActive || isPrivateCallActive) && (
                 <Alert variant="destructive" className="mt-4">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertTitle>{t('adminLivestream.toast.cameraAccessDeniedTitle')}</AlertTitle>
                   <AlertDescription>{t('adminLivestream.toast.cameraAccessDeniedDescription')}</AlertDescription>
                 </Alert>
             )}
-            {isLoadingStateForVideoArea && (
+            {isLoadingVideo && (
                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 rounded-md pointer-events-none">
                     <Loader2 className="h-12 w-12 animate-spin text-primary mb-2" />
                     <p className="text-md text-muted-foreground">{isPrivateCallActive ? privateCallStatus : t('adminLivestream.videoArea.startingCamera')}</p>
                  </div>
             )}
-             {!mainVideoPlayerSrcObject && !isLoadingStateForVideoArea &&(
+             {showOfflineMessageInVideoArea && !isLoadingVideo && (
                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 rounded-md pointer-events-none">
                   <VideoIconLucideSvg className="h-16 w-16 text-muted-foreground/50 mb-4" />
-                  <p className="text-lg text-muted-foreground">{privateCallStatus || localOfflineMessage || t('adminLivestream.videoArea.offlineMessage')}</p>
+                  <p className="text-lg text-muted-foreground">{localOfflineMessage || t('adminLivestream.videoArea.offlineMessage')}</p>
                  </div>
             )}
           </div>
-           {(isGeneralStreamActive || isPrivateCallActive) && (localStreamRef.current || adminLocalStreamForCall) && (
+           {(isGeneralStreamActive || isPrivateCallActive) && (adminLocalStreamForGeneral || adminLocalStreamForCall) && (
               <div className="mt-3 flex items-center justify-center space-x-2 sm:space-x-3">
                 <Button onClick={toggleMicrophone} variant="outline" size="sm" className="bg-card/80 hover:bg-card">
                   {isMicrophoneMuted ? <MicOff className="mr-1.5 h-4 w-4" /> : <Mic className="mr-1.5 h-4 w-4" />}
@@ -646,11 +790,7 @@ export default function LiveStreamAdminPage() {
           <CardDescription>{t('adminLivestream.persistentSettings.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-            <div className="space-y-1">
-              <Label htmlFor="default-stream-title" className="text-sm font-medium">{t('adminLivestream.configCard.defaultTitleLabel')}</Label>
-              <Input id="default-stream-title" placeholder={t('adminLivestream.configCard.defaultTitlePlaceholder')} value={localDefaultStreamTitle} onChange={(e) => setLocalDefaultStreamTitle(e.target.value)} className="text-sm" />
-               <p className="text-xs text-muted-foreground mt-1">{t('adminLivestream.configCard.defaultTitleHelpText')}</p>
-            </div>
+            {/* "Default Stream Title (Persistent)" input moved to top section, now currentGeneralStreamTitle handles this */}
             <div className="space-y-1">
               <Label htmlFor="offline-message" className="text-sm font-medium">{t('adminLivestream.configCard.offlineMessageLabel')}</Label>
               <Textarea id="offline-message" placeholder={t('adminLivestream.configCard.offlineMessagePlaceholder')} value={localOfflineMessage} onChange={(e) => setLocalOfflineMessage(e.target.value)} className="text-sm" rows={2} />
@@ -676,3 +816,5 @@ export default function LiveStreamAdminPage() {
     </div>
   );
 }
+
+    
