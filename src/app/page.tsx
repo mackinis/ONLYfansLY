@@ -221,30 +221,31 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!socket) return;
-
-    socket.on('connect', () => {
-      console.log("HomePage: Socket connected. ID:", socket.id);
-      if (!isUserInPrivateCall) socket.emit('register-general-viewer');
-    });
-    socket.on('connect_error', (error) => {
-      console.error("HomePage: Socket connection error:", error);
-      toast({ variant: 'destructive', title: 'Socket Connection Error', description: `User: ${error.message}` });
-    });
-    socket.on('disconnect', (reason) => {
-      console.log(`HomePage: Socket disconnected. Reason: ${reason}. Was general stream live: ${isGeneralStreamLive}, Was in private call: ${isUserInPrivateCall}`);
-      if (reason !== 'io client disconnect') toast({ variant: 'destructive', title: 'Socket Disconnected', description: `Reason: ${reason}` });
-
-      setIsGeneralStreamLive(false);
-      setGeneralStreamReceived(null);
-      setCurrentGeneralStreamIsLoggedInOnly(false);
-      setIsLoadingGeneralStream(false);
-      if (peerConnectionForGeneralStreamRef.current) {
-        peerConnectionForGeneralStreamRef.current.close();
-        peerConnectionForGeneralStreamRef.current = null;
+  
+    const onGeneralBroadcasterReady = ({ broadcasterId, streamTitle, streamSubtitle, isLoggedInOnly }) => {
+      // ... detección de cambios y re-registro solo si broadcasterId cambió ...
+      if (broadcasterId !== currentBroadcasterId) {
+        setCurrentBroadcasterId(broadcasterId);
+        setIsGeneralStreamLive(true);
+        if (socket && socket.connected) socket.emit('register-general-viewer');
       }
-
-      if (isUserInPrivateCall) handleEndPrivateCall(false, "Socket disconnected during call");
-    });
+    };
+    const onGeneralStreamEnded = () => {
+      setIsGeneralStreamLive(false);
+      setCurrentBroadcasterId(null);
+      // ... cerrar peerconnection, limpiar estados …
+    };
+  
+    socket.on('general-broadcaster-ready', onGeneralBroadcasterReady);
+    socket.on('general-stream-ended', onGeneralStreamEnded);
+    socket.on('general-broadcaster-disconnected', onGeneralStreamEnded);
+  
+    return () => {
+      socket.off('general-broadcaster-ready', onGeneralBroadcasterReady);
+      socket.off('general-stream-ended', onGeneralStreamEnded);
+      socket.off('general-broadcaster-disconnected', onGeneralStreamEnded);
+    };
+  }, [socket, currentBroadcasterId]);
 
     const onGeneralBroadcasterReady = ({
       broadcasterId,
