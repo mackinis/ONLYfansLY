@@ -62,7 +62,7 @@ export default async function SocketHandler(
   req: NextApiRequest,
   res: NextApiResponseWithSocket
 ) {
-  console.log(Socket.IO: API route /api/socket_io hit. Method: ${req.method});
+  console.log(`Socket.IO: API route /api/socket_io hit. Method: ${req.method}`);
 
   // Sólo inicializamos el server de Socket.IO si no existe
   if (!res.socket.server.io) {
@@ -76,9 +76,9 @@ export default async function SocketHandler(
       const appUserId = socket.handshake.query.appUserId as string | undefined;
       socket.data.appUserId = appUserId;
       console.log(
-        Socket.IO: Cliente conectado → SocketID: ${socket.id}, AppUserID: ${
+        `Socket.IO: Cliente conectado → SocketID: ${socket.id}, AppUserID: ${
           appUserId || 'Anonymous'
-        }
+        }`
       );
 
       // Si hay una llamada privada pendiente para este usuario, enviamos la invitación ahora
@@ -123,7 +123,7 @@ export default async function SocketHandler(
           targetUserAppId: string;
         }) => {
           console.log(
-            Socket.IO: Admin ${socket.id} (AppUser: ${socket.data.appUserId}) solicitó status de usuario ${targetUserAppId}
+            `Socket.IO: Admin ${socket.id} (AppUser: ${socket.data.appUserId}) solicitó status de usuario ${targetUserAppId}`
           );
           const targetUserSocket = Array.from(io.sockets.sockets.values()).find(
             (s) => s.data.appUserId === targetUserAppId
@@ -140,9 +140,9 @@ export default async function SocketHandler(
       // 2) Al desconectarse cualquier socket:
       socket.on('disconnect', async (reason) => {
         console.log(
-          Socket.IO: Cliente desconectado → SocketID: ${socket.id}, AppUserID: ${
+          `Socket.IO: Cliente desconectado → SocketID: ${socket.id}, AppUserID: ${
             socket.data.appUserId || 'Anonymous'
-          }, Reason: ${reason}
+          }, Reason: ${reason}`
         );
 
         // Si se desconectó un viewer, lo quitamos del mapa
@@ -298,7 +298,7 @@ export default async function SocketHandler(
       // 4) Viewer ─► se suscribe al stream general
       socket.on('register-general-viewer', async () => {
         console.log(
-          Socket.IO: Recibido 'register-general-viewer' de ${socket.id}
+          `Socket.IO: Recibido 'register-general-viewer' de ${socket.id}`
         );
         const settings = await getCachedSiteSettings();
         if (!settings) {
@@ -413,6 +413,7 @@ export default async function SocketHandler(
           currentGeneralStreamTitle = null;
           currentGeneralStreamSubtitle = null;
           currentGeneralStreamIsLoggedInOnly = false;
+          generalStreamViewers.clear();
           io.emit('general-broadcaster-disconnected');
         }
       });
@@ -446,7 +447,7 @@ export default async function SocketHandler(
           }
           if (userInPrivateCall) {
             socket.emit('private-call-error', {
-              message: User ${userInPrivateCall.appUserId} ya está en llamada.
+              message: `User ${userInPrivateCall.appUserId} ya está en llamada.`
             });
             return;
           }
