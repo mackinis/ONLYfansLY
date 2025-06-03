@@ -28,6 +28,9 @@ interface CallParticipant {
 let adminForPrivateCall: CallParticipant | null = null;
 let userInPrivateCall: CallParticipant | null = null;
 
+// Mapa para almacenar llamadas privadas pendientes { appUserId → { adminSocketId, adminAppUserId } }
+const pendingPrivateCalls = new Map<string, { adminSocketId: string; adminAppUserId: string }>();
+
 let siteSettingsCache: SiteSettings | null = null;
 let siteSettingsCacheTime: number = 0;
 const SITE_SETTINGS_CACHE_DURATION = 3 * 1000; // 3 segs de cache
@@ -77,6 +80,16 @@ export default async function SocketHandler(
           appUserId || 'Anonymous'
         }`
       );
+
+      // Si hay una llamada privada pendiente para este usuario, enviamos la invitación ahora
+      if (appUserId && pendingPrivateCalls.has(appUserId)) {
+        const { adminSocketId, adminAppUserId } = pendingPrivateCalls.get(appUserId)!;
+        pendingPrivateCalls.delete(appUserId);
+        socket.emit('private-call-invite-from-admin', {
+          adminSocketId,
+          adminAppUserId
+        });
+      }
 
       // Actualizamos cache de settings
       let currentSettings = await getCachedSiteSettings();
@@ -163,6 +176,12 @@ export default async function SocketHandler(
           }
           adminForPrivateCall = null;
           userInPrivateCall = null;
+          // También borramos cualquier llamada pendiente iniciada por este admin
+          for (const [userId, info] of pendingPrivateCalls) {
+            if (info.adminSocketId === socket.id) {
+              pendingPrivateCalls.delete(userId);
+            }
+          }
         } else if (
           userInPrivateCall &&
           socket.id === userInPrivateCall.socketId
@@ -235,7 +254,7 @@ export default async function SocketHandler(
           // 3.2) A TODOS los viewers ya registrados antes
           // les enviamos “general-broadcaster-ready” para que se preparen a recibir offer
           // Y, adicionalmente, enviamos un “new-general-viewer” **al propio broadcaster** 
-          // para que inicie WebRTC hacia cada viewer.
+          // para que el admin (cliente) ejecute createOffer()
           for (const [viewerId, viewerSocket] of generalStreamViewers) {
             // Si el stream es solo para usuarios logueados, nos aseguramos:
             if (
@@ -449,8 +468,13 @@ export default async function SocketHandler(
               userAppUserId: targetUserAppId
             });
           } else {
+            // Usuario no conectado aún: guardamos la llamada como pendiente
+            pendingPrivateCalls.set(targetUserAppId, {
+              adminSocketId: socket.id,
+              adminAppUserId: adminForPrivateCall.appUserId
+            });
             socket.emit('private-call-user-not-connected', { targetUserAppId });
-            adminForPrivateCall = null;
+            // adminForPrivateCall se mantiene para cuando el usuario llegue
           }
         }
       );
@@ -538,6 +562,12 @@ export default async function SocketHandler(
                 ?.emit('private-call-terminated-by-admin');
             adminForPrivateCall = null;
             userInPrivateCall = null;
+            // Limpiamos pendientes si existieran
+            for (const [userId, info] of pendingPrivateCalls) {
+              if (info.adminSocketId === socket.id) {
+                pendingPrivateCalls.delete(userId);
+              }
+            }
           }
         }
       );
@@ -554,6 +584,8 @@ export default async function SocketHandler(
             targetUserSocket?.emit('private-call-terminated-by-admin');
             adminForPrivateCall = null;
             userInPrivateCall = null;
+            // Limpiamos pendientes para ese usuario
+            pendingPrivateCalls.delete(targetUserAppId);
           }
         }
       );
@@ -573,6 +605,7 @@ export default async function SocketHandler(
                 });
             userInPrivateCall = null;
             adminForPrivateCall = null;
+            // No es necesario borrar pendientes aquí, ya fue atendido
           }
         }
       );
