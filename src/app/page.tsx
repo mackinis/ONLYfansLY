@@ -169,39 +169,81 @@ export default function HomePage() {
       if (isUserInPrivateCall) handleEndPrivateCall(false, "Socket disconnected during call");
     });
 
-    const onGeneralBroadcasterReady = ({ broadcasterId, streamTitle: titleFromServer, streamSubtitle: subtitleFromServer, isLoggedInOnly }: { broadcasterId: string, streamTitle?: string, streamSubtitle?: string, isLoggedInOnly?: boolean }) => {
-      console.log("HomePage: 'general-broadcaster-ready' received", {broadcasterId, titleFromServer, subtitleFromServer, isLoggedInOnly});
-      
-      if (peerConnectionForGeneralStreamRef.current && peerConnectionForGeneralStreamRef.current.signalingState !== 'closed') {
-        console.log("HomePage: Closing existing general PC on 'general-broadcaster-ready'.");
+    const onGeneralBroadcasterReady = ({
+      broadcasterId,
+      streamTitle: titleFromServer,
+      streamSubtitle: subtitleFromServer,
+      isLoggedInOnly
+    }: {
+      broadcasterId: string;
+      streamTitle?: string;
+      streamSubtitle?: string;
+      isLoggedInOnly?: boolean;
+    }) => {
+      console.log(
+        "HomePage: 'general-broadcaster-ready' received",
+        { broadcasterId, titleFromServer, subtitleFromServer, isLoggedInOnly }
+      );
+    
+      if (
+        peerConnectionForGeneralStreamRef.current &&
+        peerConnectionForGeneralStreamRef.current.signalingState !== "closed"
+      ) {
+        console.log(
+          "HomePage: Closing existing general PC on 'general-broadcaster-ready'."
+        );
         peerConnectionForGeneralStreamRef.current.close();
         peerConnectionForGeneralStreamRef.current = null;
       }
-      
+    
       setCurrentGeneralStreamIsLoggedInOnly(isLoggedInOnly || false);
-      setGeneralStreamReceived(null); 
+      setGeneralStreamReceived(null);
       setIsLoadingGeneralStream(true);
     
       if (isLoggedInOnly && !loggedInUserId) {
-        setIsGeneralStreamLive(false); 
-        setGeneralStreamReceived(null); 
+        setIsGeneralStreamLive(false);
+        setGeneralStreamReceived(null);
         setIsLoadingGeneralStream(false);
-        setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-        setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
-        toast({ title: t('homepage.live.accessDenied'), description: t('homepage.live.accessDeniedDescription'), variant: "destructive" }); 
+        setGeneralStreamTitle(
+          titleFromServer || siteSettings?.liveStreamDefaultTitle || t("homepage.live.defaultTitle")
+        );
+        setGeneralStreamSubtitle(
+          subtitleFromServer || siteSettings?.liveStreamSubtitle || ""
+        );
+        toast({
+          title: t("homepage.live.accessDenied"),
+          description: t("homepage.live.accessDeniedDescription"),
+          variant: "destructive",
+        });
         return;
       }
-      if (isUserInPrivateCall) { 
-        console.log("HomePage: In private call, ignoring 'general-broadcaster-ready'."); 
-        setIsLoadingGeneralStream(false); // Ensure loader is off if ignored
-        return; 
+    
+      if (isUserInPrivateCall) {
+        console.log(
+          "HomePage: In private call, ignoring 'general-broadcaster-ready'."
+        );
+        setIsLoadingGeneralStream(false);
+        return;
       }
-      
-      setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-      setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
-      setIsGeneralStreamLive(true); 
-      setGeneralStreamWebRtcError(null); 
-    };
+    
+      //–– Aquí activas el modo “live” y actualizas título/subtítulo ––
+      setGeneralStreamTitle(
+        titleFromServer || siteSettings?.liveStreamDefaultTitle || t("homepage.live.defaultTitle")
+      );
+      setGeneralStreamSubtitle(
+        subtitleFromServer || siteSettings?.liveStreamSubtitle || ""
+      );
+      setIsGeneralStreamLive(true);
+      setGeneralStreamWebRtcError(null);
+    
+      //–– Y aquí, justo después de pasar a “live”, forzamos el re‐registro del viewer ––
+      if (socket && socket.connected) {
+        console.log(
+          "HomePage: Re‐registrando como viewer tras 'general-broadcaster-ready'."
+        );
+        socket.emit("register-general-viewer");
+      }
+    };  
 
     const onGeneralStreamEnded = () => {
       console.log("HomePage: 'general-stream-ended' received.");
