@@ -419,17 +419,25 @@ export default function LiveStreamAdminPage() {
   };
 
   const handleToggleGeneralStreaming = async () => {
-    if (!socket) { 
-      toast({ title: t('adminLivestream.toast.errorTitle'), description: t('adminLivestream.toast.socketNotConnectedError'), variant: 'destructive' }); 
-      return; 
+    if (!socket) {
+      toast({
+        title: t('adminLivestream.toast.errorTitle'),
+        description: t('adminLivestream.toast.socketNotConnectedError'),
+        variant: 'destructive'
+      });
+      return;
     }
-    if (isPrivateCallActive) { 
-      toast({ title: "Action Denied", description: "Cannot manage general stream while in a private call. Please end the call first.", variant: "destructive"}); 
-      return; 
+    if (isPrivateCallActive) {
+      toast({
+        title: "Action Denied",
+        description: "Cannot manage general stream while in a private call. Please end the call first.",
+        variant: "destructive"
+      });
+      return;
     }
   
     if (isGeneralStreamActive) {
-      // Replace localStreamRef with adminLocalStreamForGeneral
+      // Detener el stream existente
       adminLocalStreamForGeneral?.getTracks().forEach(track => track.stop());
       setAdminLocalStreamForGeneral(null);
       if (localVideoRef.current) localVideoRef.current.srcObject = null;
@@ -439,42 +447,55 @@ export default function LiveStreamAdminPage() {
       if (socket.connected) socket.emit('stop-general-stream');
       setIsGeneralStreamActive(false);
       setHasCameraPermission(null);
-      toast({ title: t('adminLivestream.toast.streamStoppedTitle'), description: t('adminLivestream.toast.streamStoppedDescription') });
+      toast({
+        title: t('adminLivestream.toast.streamStoppedTitle'),
+        description: t('adminLivestream.toast.streamStoppedDescription')
+      });
     } else {
-      if (!currentGeneralStreamTitle.trim()) { 
-        toast({ title: "Stream Title Required", description: "Please enter a title for the live stream.", variant: "destructive"}); 
-        return; 
+      if (!currentGeneralStreamTitle.trim()) {
+        toast({
+          title: "Stream Title Required",
+          description: "Please enter a title for the live stream.",
+          variant: "destructive"
+        });
+        return;
       }
       const stream = await getCameraPermission(false);
       if (stream) {
         if (socket.connected) {
-          socket.emit('register-general-broadcaster', { 
-            streamTitle: currentGeneralStreamTitle, 
-            streamSubtitle: currentGeneralStreamSubtitle,
-            isLoggedInOnly: localLiveStreamForLoggedInOnly
-          });
-          // Nuevo: Notificar a viewers existentes
-          socket.emit('admin-stream-started', {
+          // Registrar al admin como broadcaster general
+          socket.emit('register-general-broadcaster', {
             streamTitle: currentGeneralStreamTitle,
             streamSubtitle: currentGeneralStreamSubtitle,
             isLoggedInOnly: localLiveStreamForLoggedInOnly
           });
+          console.log("AdminLiveStream: Emitted 'register-general-broadcaster' con socket.id =", socket.id);
         } else {
-          toast({ title: t('adminLivestream.toast.errorTitle'), description: "Socket not connected. Cannot start stream.", variant: 'destructive'});
-          stream.getTracks().forEach(track => track.stop()); 
+          toast({
+            title: t('adminLivestream.toast.errorTitle'),
+            description: "Socket not connected. Cannot start stream.",
+            variant: 'destructive'
+          });
+          stream.getTracks().forEach(track => track.stop());
           setAdminLocalStreamForGeneral(null);
-          if (localVideoRef.current) localVideoRef.current.srcObject = null; 
-          setHasCameraPermission(null); 
+          if (localVideoRef.current) localVideoRef.current.srcObject = null;
+          setHasCameraPermission(null);
           return;
         }
         setIsGeneralStreamActive(true);
-        let streamTypeInfo = siteSettings?.liveStreamForLoggedInUsersOnly ? t('adminLivestream.toast.loggedInOnlyStreamInfo') : t('adminLivestream.toast.publicStreamInfo');
-        toast({ title: t('adminLivestream.toast.streamStartingTitle'), description: streamTypeInfo });
-      } else { 
-        setIsGeneralStreamActive(false); 
+        let streamTypeInfo = siteSettings?.liveStreamForLoggedInUsersOnly
+          ? t('adminLivestream.toast.loggedInOnlyStreamInfo')
+          : t('adminLivestream.toast.publicStreamInfo');
+        toast({
+          title: t('adminLivestream.toast.streamStartingTitle'),
+          description: streamTypeInfo
+        });
+      } else {
+        setIsGeneralStreamActive(false);
       }
     }
   };
+  
 
   const initiateWebRTCPrivateCallOffer = async (targetUserSocketId: string, currentSocket: Socket) => {
     console.log("AdminLiveStream: initiateWebRTCPrivateCallOffer to targetUserSocketId:", targetUserSocketId);
