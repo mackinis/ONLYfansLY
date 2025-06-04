@@ -1014,18 +1014,19 @@ export default function HomePage() {
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
               </div>
             ) : videoCourses.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-center">
-                {videoCourses.map((video) => (
-                  <VideoCard
-                    key={video.id}
-                    video={video}
-                    onWatchNowClick={handleOpenVideoPlayer}
-                    onCourseCardClick={handleOpenCourseDetail}
-                    displayCurrency={displayCurrency}
-                    exchangeRates={effectiveExchangeRates}
-                  />
-                ))}
-              </div>
+<div className="flex flex-wrap justify-center gap-6">
+  {videoCourses.map((video) => (
+    <div className="min-w-[280px] max-w-[340px] w-full sm:w-[300px] md:w-[340px]" key={video.id}>
+      <VideoCard
+        video={video}
+        onWatchNowClick={handleOpenVideoPlayer}
+        onCourseCardClick={handleOpenCourseDetail}
+        displayCurrency={displayCurrency}
+        exchangeRates={effectiveExchangeRates}
+      />
+    </div>
+  ))}
+</div>
             ) : (
               <p className="text-center text-muted-foreground">
                 {t('homepage.courses.noCourses')}

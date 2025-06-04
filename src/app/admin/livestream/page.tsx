@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
@@ -51,6 +50,7 @@ export default function LiveStreamAdminPage() {
 
   const [localDefaultStreamTitle, setLocalDefaultStreamTitle] = useState('');
   const [localOfflineMessage, setLocalOfflineMessage] = useState('');
+  const [persistentSettingsSubtitle, setPersistentSettingsSubtitle] = useState(''); // <-- NUEVO ESTADO
   const [localLiveStreamForLoggedInOnly, setLocalLiveStreamForLoggedInOnly] = useState(false);
   const [isSubmittingSettings, setIsSubmittingSettings] = useState(false);
 
@@ -169,8 +169,8 @@ export default function LiveStreamAdminPage() {
         console.log("AdminLiveStream: Disconnecting socket in effect cleanup for adminAppUserId/isLoadingSettings. Socket ID:", newSocket.id);
         newSocket.disconnect();
     };
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [adminAppUserId, isLoadingSettings]); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminAppUserId, isLoadingSettings]); 
 
   useEffect(() => {
     if (!socket) return;
@@ -188,7 +188,6 @@ export default function LiveStreamAdminPage() {
     };
     const onDisconnect = (reason: Socket.DisconnectReason) => {
       const wasGeneralBroadcaster = socket.data && socket.data.isGeneralBroadcaster;
-      // Corrected console.log by removing server-side variable reference
       console.log(`AdminLiveStream: Socket disconnected. Reason: ${reason}. WasGeneralBroadcaster: ${wasGeneralBroadcaster}, isPrivateCallActive: ${isPrivateCallActive}`);
       if (reason !== 'io client disconnect') {
         toast({ variant: 'destructive', title: t('adminLivestream.toast.socketDisconnectedTitle'), description: `${t('adminLivestream.toast.socketDisconnectedStreamInterrupt')} Reason: ${reason}` });
@@ -702,7 +701,7 @@ export default function LiveStreamAdminPage() {
             videoEl.removeEventListener('loadedmetadata', handleLoadedMetadata);
           };
           videoEl.addEventListener('loadedmetadata', handleLoadedMetadata);
-           videoEl.onerror = (e) => {
+          videoEl.onerror = (e) => {
             console.error("AdminLiveStream (Remote Video Effect): Video element error on remoteVideoRef.", e);
             setIsLoadingVideo(false);
             videoEl.removeEventListener('loadedmetadata', handleLoadedMetadata);
@@ -767,8 +766,6 @@ export default function LiveStreamAdminPage() {
                 />
                 <p className="text-xs text-muted-foreground mt-1">{t('adminLivestream.configCard.currentLiveSubtitleHelpText')}</p>
             </div>
-            {/* Log for debugging button state */}
-            {/* console.log("Render General Stream Button: isPrivateCallActive", isPrivateCallActive, "isGeneralStreamActive", isGeneralStreamActive, "currentGeneralStreamTitle", currentGeneralStreamTitle.trim(), "isLoadingVideo", isLoadingVideo) */}
             <Button onClick={handleToggleGeneralStreaming} disabled={isPrivateCallActive || (!isGeneralStreamActive && !currentGeneralStreamTitle.trim()) || isLoadingVideo}>
                 {(isLoadingVideo && !isGeneralStreamActive && !isPrivateCallActive && !adminLocalStreamForGeneral) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isGeneralStreamActive ? <StopCircle className="mr-2 h-4 w-4"/> : <Radio className="mr-2 h-4 w-4"/>}
@@ -877,23 +874,48 @@ export default function LiveStreamAdminPage() {
       <Card className="shadow-xl border-primary/20">
         <CardHeader>
           <CardTitle className="font-headline text-2xl">{t('adminLivestream.persistentSettings.title')}</CardTitle>
-          <CardDescription>{t('adminLivestream.persistentSettings.description')}</CardDescription>
+          <CardDescription>{persistentSettingsSubtitle || t('adminLivestream.persistentSettings.fallbackSubtitle')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-            <div className="space-y-1">
-              <Label htmlFor="offline-message" className="text-sm font-medium">{t('adminLivestream.configCard.offlineMessageLabel')}</Label>
-              <Textarea id="offline-message" placeholder={t('adminLivestream.configCard.offlineMessagePlaceholder')} value={localOfflineMessage} onChange={(e) => setLocalOfflineMessage(e.target.value)} className="text-sm" rows={2} />
-               <p className="text-xs text-muted-foreground mt-1">{t('adminLivestream.configCard.offlineMessageHelpText')}</p>
-            </div>
-            <div className="flex items-center space-x-2 pt-2">
-              <Switch id="liveStreamForLoggedInUsersOnly" checked={localLiveStreamForLoggedInOnly} onCheckedChange={setLocalLiveStreamForLoggedInOnly} disabled={isSubmittingSettings} />
-              <Label htmlFor="liveStreamForLoggedInUsersOnly" className="text-sm font-medium">{t('adminLiveStreamPage.loggedInUsersOnly')}</Label>
-            </div>
-            <p className="text-xs text-muted-foreground">{t('adminLiveStreamPage.loggedInUsersOnlyDescription')}</p>
-             <p className="text-xs text-muted-foreground mt-1">
-                <ShieldAlert className="inline h-3.5 w-3.5 mr-1 text-yellow-500" />
-                {t('adminLivestream.toast.loggedInOnlyClearsSpecificUser')}
-            </p>
+          <div className="space-y-1">
+            <Label htmlFor="persistent-subtitle" className="text-sm font-medium">Subtítulo Persistente</Label>
+            <Input
+              id="persistent-subtitle"
+              placeholder="Escribe aquí el subtítulo que sólo se mostrará en Configuraciones Persistentes"
+              value={persistentSettingsSubtitle}
+              onChange={(e) => setPersistentSettingsSubtitle(e.target.value)}
+              className="text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Este texto NO afectará al mensaje dentro del video.</p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="offline-message" className="text-sm font-medium">{t('adminLivestream.configCard.offlineMessageLabel')}</Label>
+            <Textarea
+              id="offline-message"
+              placeholder={t('adminLivestream.configCard.offlineMessagePlaceholder')}
+              value={localOfflineMessage}
+              onChange={(e) => setLocalOfflineMessage(e.target.value)}
+              className="text-sm"
+              rows={2}
+            />
+            <p className="text-xs text-muted-foreground mt-1">{t('adminLivestream.configCard.offlineMessageHelpText')}</p>
+          </div>
+          <div className="flex items-center space-x-2 pt-2">
+            <Switch
+              id="liveStreamForLoggedInUsersOnly"
+              checked={localLiveStreamForLoggedInOnly}
+              onCheckedChange={setLocalLiveStreamForLoggedInOnly}
+              disabled={isSubmittingSettings}
+            />
+            <Label htmlFor="liveStreamForLoggedInUsersOnly" className="text-sm font-medium">
+              {t('adminLivestream.liveStreamForLoggedInUsersOnly')}
+            </Label>
+          </div>
+          <p className="text-xs text-muted-foreground">{t('adminLivestream.liveStreamForLoggedInUsersOnlyDescription')}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            <ShieldAlert className="inline h-3.5 w-3.5 mr-1 text-yellow-500" />
+            {t('adminLivestream.toast.loggedInOnlyClearsSpecificUser')}
+          </p>
         </CardContent>
         <CardFooter className="border-t pt-6 flex justify-end">
           <Button onClick={handleSaveChanges} disabled={isSubmittingSettings}>

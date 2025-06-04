@@ -84,8 +84,8 @@ export default function Footer() {
           >
             
             {/* Columna 1: Brand */}
-            <div className="flex justify-center md:justify-start items-center text-center md:text-left">
-              {renderFooterBrand()}
+            <div className="flex justify-center items-center text-center">
+            {renderFooterBrand()}
             </div>
 
             {/* Columna 2: Quick Links */}
