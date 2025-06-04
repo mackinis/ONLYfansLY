@@ -163,9 +163,9 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container max-w-screen-2xl px-4 h-16 grid grid-cols-3 items-center">
-        {/* LOGO (izquierda) */}
-        <div className="flex items-center">
+      <div className="relative container max-w-screen-2xl flex items-center h-16 px-4">
+        {/* IZQUIERDA: Logo */}
+        <div className="flex items-center pl-2 md:pl-6">
           <Link href="/" className="flex items-center space-x-2">
             {(headerDisplayMode === 'logo' || headerDisplayMode === 'both') && (
               effectiveHeaderIconUrl ? (
@@ -185,9 +185,9 @@ export default function Header() {
           </Link>
         </div>
 
-        {/* NAV (CENTRADO SIEMPRE) */}
+        {/* CENTRO: NAV SOLO EN DESKTOP */}
         {!isAdminPage && (
-          <nav className="hidden md:flex justify-center items-center text-sm font-medium space-x-6">
+          <nav className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm font-medium space-x-6">
             {navLinks.map(link => (
               <Link
                 key={link.labelKey}
@@ -201,8 +201,8 @@ export default function Header() {
           </nav>
         )}
 
-        {/* BOTONES DERECHA */}
-        <div className="flex items-center justify-end space-x-1 sm:space-x-2">
+        {/* DERECHA: Botones + Menú mobile */}
+        <div className="flex items-center justify-end flex-1 space-x-1 sm:space-x-2 pr-2 md:pr-6">
           {allowUserToChooseCurrency && !isAdminPage && activeCurrencies.length > 1 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
