@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -23,13 +22,13 @@ import {
   SheetTrigger,
   SheetClose,
 } from "@/components/ui/sheet";
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import { cn } from '@/lib/utils';
-import type { SessionUserProfile, HeaderDisplayMode, ActiveCurrencySetting } from '@/lib/types';
+import type { SessionUserProfile } from '@/lib/types';
 import { Separator } from '../ui/separator';
-import { defaultThemeColorsHex } from '@/lib/config'; // Import default theme colors
+import { defaultThemeColorsHex } from '@/lib/config';
 
 export default function Header() {
   const {
@@ -81,7 +80,6 @@ export default function Header() {
       }
     }
   }, [siteSettings]);
-
 
   const updateLoginState = () => {
     if (typeof window !== 'undefined') {
@@ -165,27 +163,31 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4">
-        <Link href="/" className="flex items-center space-x-2">
-          {(headerDisplayMode === 'logo' || headerDisplayMode === 'both') && (
-            effectiveHeaderIconUrl ? (
-              <Image src={effectiveHeaderIconUrl} alt={currentSiteTitle || t('header.title')} width={32} height={32} className="h-8 w-8 rounded-sm" data-ai-hint="logo" />
-            ) : (
-              <Film className="h-8 w-8 text-primary" />
-            )
-          )}
-          {(headerDisplayMode === 'title' || headerDisplayMode === 'both') && (
-            <span className={cn(
-              "font-headline text-2xl font-bold text-primary",
-              headerDisplayMode === 'logo' && "sr-only md:not-sr-only"
-            )}>
-              {currentSiteTitle || t('header.title')}
-            </span>
-          )}
-        </Link>
+      <div className="container max-w-screen-2xl px-4 h-16 grid grid-cols-3 items-center">
+        {/* LOGO (izquierda) */}
+        <div className="flex items-center">
+          <Link href="/" className="flex items-center space-x-2">
+            {(headerDisplayMode === 'logo' || headerDisplayMode === 'both') && (
+              effectiveHeaderIconUrl ? (
+                <Image src={effectiveHeaderIconUrl} alt={currentSiteTitle || t('header.title')} width={32} height={32} className="h-8 w-8 rounded-sm" data-ai-hint="logo" />
+              ) : (
+                <Film className="h-8 w-8 text-primary" />
+              )
+            )}
+            {(headerDisplayMode === 'title' || headerDisplayMode === 'both') && (
+              <span className={cn(
+                "font-headline text-2xl font-bold text-primary",
+                headerDisplayMode === 'logo' && "sr-only md:not-sr-only"
+              )}>
+                {currentSiteTitle || t('header.title')}
+              </span>
+            )}
+          </Link>
+        </div>
 
+        {/* NAV (CENTRADO SIEMPRE) */}
         {!isAdminPage && (
-          <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
+          <nav className="hidden md:flex justify-center items-center text-sm font-medium space-x-6">
             {navLinks.map(link => (
               <Link
                 key={link.labelKey}
@@ -199,7 +201,8 @@ export default function Header() {
           </nav>
         )}
 
-        <div className="flex items-center space-x-1 sm:space-x-2">
+        {/* BOTONES DERECHA */}
+        <div className="flex items-center justify-end space-x-1 sm:space-x-2">
           {allowUserToChooseCurrency && !isAdminPage && activeCurrencies.length > 1 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -297,8 +300,9 @@ export default function Header() {
             </DropdownMenu>
           )}
 
+          {/* MOBILE MENU */}
           {!isAdminPage && (
-            <div className="md:hidden"> {/* Este div ahora contiene el SheetTrigger */}
+            <div className="md:hidden">
               <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
                 <SheetTrigger asChild>
                   <Button variant="ghost" size="icon">
@@ -389,5 +393,3 @@ export default function Header() {
     </header>
   );
 }
-
-    
