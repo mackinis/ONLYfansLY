@@ -1016,7 +1016,7 @@ export default function HomePage() {
             ) : videoCourses.length > 0 ? (
 <div className="flex flex-wrap justify-center gap-6">
   {videoCourses.map((video) => (
-    <div className="min-w-[280px] max-w-[340px] w-full sm:w-[300px] md:w-[340px]" key={video.id}>
+    <div className="min-w-[240px] max-w-[340px] w-full sm:w-[240px] md:w-[340px]" key={video.id}>
       <VideoCard
         video={video}
         onWatchNowClick={handleOpenVideoPlayer}
