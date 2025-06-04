@@ -497,68 +497,101 @@ export default function LiveStreamAdminPage() {
   
 
   const initiateWebRTCPrivateCallOffer = async (targetUserSocketId: string, currentSocket: Socket) => {
-    console.log("AdminLiveStream: initiateWebRTCPrivateCallOffer to targetUserSocketId:", targetUserSocketId);
-    if (!currentSocket || !currentSocket.connected || !adminLocalStreamForCall) { 
-        console.error("AdminLiveStream: Cannot initiate private call offer. Socket/stream missing. adminLocalStreamForCall:", !!adminLocalStreamForCall);
-        setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Internal Error)"); return; 
-    }
-    
+    if (!currentSocket.connected || !adminLocalStreamForCall) { /*…*/ }
+  
+    // Cerramos cualquier PC anterior
     if (peerConnectionForCallRef.current && peerConnectionForCallRef.current.signalingState !== 'closed') {
-        console.log("AdminLiveStream: Closing existing peerConnectionForCallRef before creating new one for private call offer.");
-        peerConnectionForCallRef.current.close();
-        peerConnectionForCallRef.current = null;
+      peerConnectionForCallRef.current.close();
+      peerConnectionForCallRef.current = null;
     }
-    peerConnectionForCallRef.current = new RTCPeerConnection(PC_CONFIG);
-    console.log("AdminLiveStream: New RTCPeerConnection created for private call offer.");
-    
+    const pc = new RTCPeerConnection(PC_CONFIG);
+    peerConnectionForCallRef.current = pc;
+  
+    // Añadimos tracks locales:
     adminLocalStreamForCall.getTracks().forEach(track => {
-        try { peerConnectionForCallRef.current!.addTrack(track, adminLocalStreamForCall); console.log("AdminLiveStream: Added local track to private call PC:", track.kind); } 
-        catch (e:any) { console.error("AdminLiveStream: Error adding admin's local track to private PC:", track.kind, e.message); }
+      try { pc.addTrack(track, adminLocalStreamForCall); }
+      catch (err) { console.error("[Admin] Error al addTrack:", err); }
     });
-
-    peerConnectionForCallRef.current.onicecandidate = (event) => { 
-        if (event.candidate && currentSocket.connected) { 
-            console.log("AdminLiveStream: Sending private ICE candidate to user:", targetUserSocketId);
-            try { currentSocket.emit('private-ice-candidate', { targetSocketId: targetUserSocketId, candidate: event.candidate }); } 
-            catch (e:any) { console.error("AdminLiveStream: Error emitting private ICE:", e.message); }
-        }
-    };
-    peerConnectionForCallRef.current.ontrack = (event) => { 
-        console.log("AdminLiveStream: Private call 'ontrack' event from user. Streams:", event.streams);
-        if (event.streams[0]) setPrivateCallRemoteStream(event.streams[0]); 
-        else { setPrivateCallRemoteStream(null); console.log("AdminLiveStream: Private call 'ontrack' event but no stream[0].");}
-    };
-    peerConnectionForCallRef.current.onconnectionstatechange = () => { 
-        if(peerConnectionForCallRef.current) { 
-            const state = peerConnectionForCallRef.current.connectionState; 
-            console.log(`AdminLiveStream: Private call PC connection state changed to: ${state}`);
-            if (state === 'connected') {
-                setPrivateCallStatus(t('adminLivestream.privateCall.statusConnected', { userName: authorizedUserForStream?.name || 'User' }));
-                setIsLoadingVideo(false);
-            } else if (['failed', 'disconnected', 'closed'].includes(state)) { 
-                if (isPrivateCallActive) handleEndPrivateCall(false, `PC state changed to ${state}`); 
-            }
-        }
-    };
-    
-    try {
-      const offer = await peerConnectionForCallRef.current.createOffer();
-      await peerConnectionForCallRef.current.setLocalDescription(offer);
-      if (currentSocket.connected) { 
-        currentSocket.emit('private-sdp-offer', { targetSocketId: targetUserSocketId, offer }); 
-        setPrivateCallStatus(t('adminLivestream.privateCall.statusConnecting', { userName: authorizedUserForStream?.name || 'User' }));
-        console.log("AdminLiveStream: Private call SDP offer sent to user:", targetUserSocketId);
-      } else { 
-        setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Socket Disconnected)"); 
-        handleEndPrivateCall(false, "Socket disconnected before sending offer"); 
+  
+    // Configuramos onicecandidate “trickle ICE”
+    pc.onicecandidate = event => {
+      if (event.candidate && currentSocket.connected) {
+        currentSocket.emit('private-ice-candidate', { targetSocketId, candidate: event.candidate });
       }
+    };
+  
+    // Reforzamos manejo de estado de conexión:
+    let iceTimeout: NodeJS.Timeout;
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      console.log(`[Admin] PrivateCall pc.connectionState → ${state}`);
+      if (state === 'connected') {
+        setPrivateCallStatus(t('adminLivestream.privateCall.statusConnected', { userName: authorizedUserForStream?.name || 'User' }));
+        setIsLoadingVideo(false);
+        clearTimeout(iceTimeout);
+      } else if (state === 'failed' || state === 'disconnected') {
+        console.warn(`[Admin] PrivateCall conexión perdida (state=${state}). Intentando renegociar…`);
+        // Si no logramos conectar, forzamos ICE restart:
+        pc.createOffer({ iceRestart: true })
+          .then(newOffer => pc.setLocalDescription(newOffer))
+          .then(() => {
+            if (socket.connected) {
+              socket.emit('private-sdp-offer', { targetSocketId, offer: pc.localDescription });
+              // Reinicio otro timeout por si falla
+              clearTimeout(iceTimeout);
+              iceTimeout = setTimeout(() => {
+                if (pc.connectionState !== 'connected') {
+                  console.error("[Admin] ICE restart fallido. Terminando llamada.");
+                  handleEndPrivateCall(true, "ICE restart fallido");
+                }
+              }, 3000);
+            }
+          })
+          .catch(err => {
+            console.error("[Admin] Error en renegociación con iceRestart:", err);
+            handleEndPrivateCall(true, "Error ICE restart");
+          });
+      } else if (state === 'closed') {
+        console.log("[Admin] PeerConnection cerrada.");
+      }
+    };
+  
+    // Creamos la oferta inicial:
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      if (socket.connected) {
+        socket.emit('private-sdp-offer', { targetSocketId, offer });
+        setPrivateCallStatus(t('adminLivestream.privateCall.statusConnecting', { userName: authorizedUserForStream?.name || 'User' }));
+      } else {
+        setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed') + " (Socket desconectado)");
+        handleEndPrivateCall(true, "Socket desconectado antes de enviar offer");
+      }
+      // Programamos timeout para ICE:
+      iceTimeout = setTimeout(() => {
+        if (pc.connectionState !== 'connected') {
+          console.warn("[Admin] ICE timeout: intentando iceRestart...");
+          pc.createOffer({ iceRestart: true })
+            .then(newOffer => pc.setLocalDescription(newOffer))
+            .then(() => {
+              if (socket.connected) {
+                socket.emit('private-sdp-offer', { targetSocketId, offer: pc.localDescription });
+              }
+            })
+            .catch(e => {
+              console.error("[Admin] ICE timeout - ICE restart fallido", e);
+              handleEndPrivateCall(true, "ICE restart timeout fallido");
+            });
+        }
+      }, 3000);
     } catch (error: any) {
-      console.error("AdminLiveStream: Error creating/sending private call offer:", error.message); 
-      setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed')); 
-      toast({ variant: 'destructive', title: 'WebRTC Error', description: `Failed to create private call offer. Err: ${error.message}` }); 
-      handleEndPrivateCall(false, "Error creating/sending offer");
+      console.error("[Admin] Error creando/enviando oferta de llamada privada:", error);
+      setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed'));
+      toast({ variant: 'destructive', title: 'WebRTC Error', description: `No se pudo crear oferta de llamada privada: ${error.message}` });
+      handleEndPrivateCall(true, "Error al crear oferta");
     }
   };
+  
 
   const handleStartPrivateCall = async () => {
     console.log("AdminLiveStream: handleStartPrivateCall called.");
@@ -801,7 +834,7 @@ export default function LiveStreamAdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button onClick={isPrivateCallActive ? () => handleEndPrivateCall(true, "Admin manually ended call") : handleStartPrivateCall} disabled={isLoadingVideo || !canStartPrivateCall && !isPrivateCallActive}>
+          <Button onClick={isPrivateCallActive ? () => handleEndPrivateCall(true, "Admin manually ended call") : handleStartPrivateCall} disabled={ (!isPrivateCallActive && (isLoadingVideo || !canStartPrivateCall)) }>
             {(isLoadingVideo && !isPrivateCallActive && !adminLocalStreamForCall) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isPrivateCallActive ? <PhoneOff className="mr-2 h-4 w-4"/> : <PhoneCall className="mr-2 h-4 w-4"/>}
             {isPrivateCallActive ? t('adminLivestream.endPrivateCallButton') : t('adminLivestream.startPrivateCallButton')}
