@@ -3,15 +3,6 @@
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import VideoCard from '@/components/VideoCard';
-import type {
-  Video,
-  SiteSettings,
-  ExchangeRates,
-  Announcement,
-  HeroTaglineSize,
-  SessionUserProfile
-} from '@/lib/types';
-import CuratedTestimonialsDisplay from '@/components/CuratedTestimonialsDisplay';
 import VideoPlayerModal from '@/components/VideoPlayerModal';
 import AnnouncementModal from '@/components/AnnouncementModal';
 import CourseDetailModal from '@/components/CourseDetailModal';
@@ -31,10 +22,18 @@ import {
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/context/I18nContext';
 import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
-import Link from 'next/link';
+import type {
+  Video,
+  SiteSettings,
+  ExchangeRates,
+  Announcement,
+  HeroTaglineSize,
+  SessionUserProfile
+} from '@/lib/types';
 
 const PC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -48,6 +47,7 @@ export default function HomePage() {
   } = useTranslation();
   const { toast } = useToast();
 
+  // --- Socket & General Stream State ---
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isGeneralStreamLive, setIsGeneralStreamLive] = useState(false);
   const [generalStreamTitle, setGeneralStreamTitle] = useState('');
@@ -59,14 +59,15 @@ export default function HomePage() {
   const [generalStreamReceived, setGeneralStreamReceived] = useState<MediaStream | null>(null);
   const [isGeneralStreamMuted, setIsGeneralStreamMuted] = useState(true);
   const [isLoadingGeneralStream, setIsLoadingGeneralStream] = useState(false);
-
-  // Evita re-registros infinitos
   const [currentBroadcasterId, setCurrentBroadcasterId] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 5;
 
+  // --- Logged-in User State ---
   const [loggedInUserId, setLoggedInUserId] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<SessionUserProfile | null>(null);
 
-  // ---------- Private Call State ----------
+  // --- Private Call State ---
   const [isUserInPrivateCall, setIsUserInPrivateCall] = useState(false);
   const [privateCallAdminSocketId, setPrivateCallAdminSocketId] = useState<string | null>(null);
   const [userLocalStreamForCall, setUserLocalStreamForCall] = useState<MediaStream | null>(null);
@@ -80,7 +81,7 @@ export default function HomePage() {
   const [hasCallCameraPermission, setHasCallCameraPermission] = useState<boolean | null>(null);
   const [isLoadingPrivateCallVideo, setIsLoadingPrivateCallVideo] = useState(false);
 
-  // Courses + Announcements
+  // --- Courses + Announcements State ---
   const [videoCourses, setVideoCourses] = useState<Video[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
   const [selectedVideoForPlayer, setSelectedVideoForPlayer] = useState<Video | null>(null);
@@ -97,7 +98,7 @@ export default function HomePage() {
   const siteLiveStreamDefaultTitle = siteSettings?.liveStreamDefaultTitle;
   const siteLiveStreamOfflineMessage = siteSettings?.liveStreamOfflineMessage;
 
-  // -------- Load user profile from session --------
+  // --- 1) Load User Profile from Session ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedProfile = sessionStorage.getItem('aurum_user_profile');
@@ -118,10 +119,10 @@ export default function HomePage() {
     }
   }, []);
 
-  // -------- Sync site settings into exchangeRates and default titles --------
+  // --- 2) Sync Site Settings into Exchange Rates and Default Titles ---
   useEffect(() => {
     if (siteSettings) {
-      setCurrentExchangeRates(siteSettings.exchangeRates);
+      setCurrentExchangeRates(siteSettings.exchangeRates || null);
       if (!isGeneralStreamLive && !isUserInPrivateCall) {
         setGeneralStreamTitle(siteSettings.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
         setGeneralStreamSubtitle(siteSettings.liveStreamSubtitle || '');
@@ -129,7 +130,7 @@ export default function HomePage() {
     }
   }, [siteSettings, t, isGeneralStreamLive, isUserInPrivateCall]);
 
-  // -------- Fetch video courses --------
+  // --- 3) Fetch Video Courses ---
   useEffect(() => {
     const fetchCourses = async () => {
       setIsLoadingCourses(true);
@@ -140,7 +141,11 @@ export default function HomePage() {
         setVideoCourses(data);
       } catch (error) {
         console.error('HomePage: Error fetching video courses:', error);
-        toast({ title: t('homepage.courses.errorLoadingTitle'), description: t('homepage.courses.errorLoadingDescription'), variant: 'destructive' });
+        toast({
+          title: t('homepage.courses.errorLoadingTitle'),
+          description: t('homepage.courses.errorLoadingDescription'),
+          variant: 'destructive'
+        });
       } finally {
         setIsLoadingCourses(false);
       }
@@ -148,7 +153,7 @@ export default function HomePage() {
     fetchCourses();
   }, [toast, t]);
 
-  // -------- Fetch announcement --------
+  // --- 4) Fetch Announcement ---
   const fetchAndShowAnnouncement = useCallback(async () => {
     setIsLoadingAnnouncement(true);
     try {
@@ -159,7 +164,11 @@ export default function HomePage() {
       if (announcements.length > 0) {
         const firstAnn = announcements[0];
         const viewedKey = `announcement_viewed_${firstAnn.id}`;
-        if (firstAnn.showOnce && typeof window !== 'undefined' && localStorage.getItem(viewedKey) === 'true') {
+        if (
+          firstAnn.showOnce &&
+          typeof window !== 'undefined' &&
+          localStorage.getItem(viewedKey) === 'true'
+        ) {
           setCurrentAnnouncement(null);
         } else {
           setCurrentAnnouncement(firstAnn);
@@ -180,7 +189,7 @@ export default function HomePage() {
     fetchAndShowAnnouncement();
   }, [fetchAndShowAnnouncement]);
 
-  // -------- Handlers to open modals --------
+  // --- Handlers to Open Modals ---
   const handleOpenVideoPlayer = (video: Video) => {
     setSelectedVideoForPlayer(video);
     setIsVideoPlayerModalOpen(true);
@@ -194,29 +203,34 @@ export default function HomePage() {
     handleOpenVideoPlayer(video);
   };
 
-  // -------- Private Call: cleanup --------
+  // --- 5) Private Call: Cleanup ---
   const handleEndPrivateCall = useCallback(
     (emitToServer = true, reason = 'User ended call') => {
       console.log(`HomePage: Ending private call. Emit to server: ${emitToServer}. Reason: ${reason}`);
+      // Close PeerConnection
       if (peerConnectionForPrivateCallRef.current) {
         peerConnectionForPrivateCallRef.current.close();
         peerConnectionForPrivateCallRef.current = null;
         console.log('HomePage: Closed private call PeerConnection.');
       }
+      // Stop local tracks
       if (userLocalStreamForCall) {
         userLocalStreamForCall.getTracks().forEach((track) => track.stop());
         setUserLocalStreamForCall(null);
         console.log('HomePage: Stopped user local tracks for private call.');
       }
+      // Clear remote stream
       setAdminStreamForCall(null);
       if (privateCallMainVideoRef.current) privateCallMainVideoRef.current.srcObject = null;
       if (privateCallUserPipVideoRef.current) privateCallUserPipVideoRef.current.srcObject = null;
 
+      // Notify admin if still connected
       if (socket && socket.connected && emitToServer && privateCallAdminSocketId) {
         console.log(`HomePage: Emitting 'user-end-private-call' to admin: ${privateCallAdminSocketId}`);
         socket.emit('user-end-private-call', { adminSocketId: privateCallAdminSocketId });
       }
 
+      // Reset private call state
       setIsUserInPrivateCall(false);
       setPrivateCallAdminSocketId(null);
       setPrivateCallStatusMessage('');
@@ -225,19 +239,19 @@ export default function HomePage() {
       setHasCallCameraPermission(null);
       setIsLoadingPrivateCallVideo(false);
 
-      // Después de llamada, re-registrar como viewer
+      // After call, re-register as general viewer
       if (socket && socket.connected) {
-        console.log('HomePage: Re-registrando como general viewer tras terminar llamada privada.');
+        console.log('HomePage: Re-registering as general viewer after ending private call.');
         socket.emit('register-general-viewer');
       }
     },
     [socket, privateCallAdminSocketId, userLocalStreamForCall]
   );
 
-  // -------- Main socket connection logic --------
+  // --- 6) Main Socket Connection Logic ---
   useEffect(() => {
     if (isLoadingSiteSettings) {
-      // Si no tenemos settings, desconectamos socket si existe
+      // If no settings yet, disconnect socket if exists
       if (socket) {
         socket.disconnect();
         setSocket(null);
@@ -245,7 +259,7 @@ export default function HomePage() {
       return;
     }
 
-    // Decidir si debemos conectar
+    // Decide whether to connect
     let shouldConnect = false;
     const queryParams: { appUserId?: string } = {};
 
@@ -255,7 +269,7 @@ export default function HomePage() {
     } else if (siteSettings && !siteSettings.liveStreamForLoggedInUsersOnly) {
       shouldConnect = true;
     } else {
-      // No logged in y el stream es sólo para logueados → desconectar
+      // Not logged in & stream requires login → disconnect
       if (socket) {
         socket.disconnect();
         setSocket(null);
@@ -267,574 +281,584 @@ export default function HomePage() {
     }
 
     if (shouldConnect) {
-      console.log('HomePage: Inicializando conexión socket. Query params:', queryParams);
-      const newSocket = io({ path: '/api/socket_io', query: queryParams });
+      console.log('HomePage: Initializing socket connection. Query params:', queryParams);
+
+      // 6.A) Create socket with autoConnect: false
+      const newSocket = io({
+        path: '/api/socket_io',
+        autoConnect: false,
+        query: queryParams
+      });
+
+      // 6.B) Pre‐hook listeners BEFORE socket.connect()
+
+      // --- Connection Events ---
+      newSocket.on('connect', onConnect);
+      newSocket.on('connect_error', onConnectError);
+      newSocket.on('disconnect', onDisconnect);
+
+      // --- General Stream Events ---
+      newSocket.on('general-broadcaster-ready', onGeneralBroadcasterReady);
+      newSocket.on('general-stream-ended', onGeneralStreamEnded);
+      newSocket.on('general-broadcaster-disconnected', onGeneralStreamEnded);
+      newSocket.on('offer-from-general-broadcaster', onOfferFromGeneralBroadcaster);
+      newSocket.on('candidate-from-general-broadcaster', onCandidateFromGeneralBroadcaster);
+      newSocket.on('general-stream-access-denied', onGeneralStreamAccessDenied);
+
+      // --- Private Call Events ---
+      newSocket.on('private-call-invite-from-admin', onPrivateCallInviteFromAdmin);
+      newSocket.on('private-sdp-offer-received', onPrivateSdpOfferReceived);
+      newSocket.on('private-ice-candidate-received', onPrivateIceCandidateReceived);
+      newSocket.on('private-call-terminated-by-admin', onPrivateCallTerminatedByAdmin);
+
+      // 6.C) Now connect
+      newSocket.connect();
       setSocket(newSocket);
+
       return () => {
-        console.log('HomePage: Desconectando socket en cleanup:', newSocket.id);
+        // Cleanup all listeners and disconnect
+        newSocket.off('connect', onConnect);
+        newSocket.off('connect_error', onConnectError);
+        newSocket.off('disconnect', onDisconnect);
+
+        newSocket.off('general-broadcaster-ready', onGeneralBroadcasterReady);
+        newSocket.off('general-stream-ended', onGeneralStreamEnded);
+        newSocket.off('general-broadcaster-disconnected', onGeneralStreamEnded);
+        newSocket.off('offer-from-general-broadcaster', onOfferFromGeneralBroadcaster);
+        newSocket.off('candidate-from-general-broadcaster', onCandidateFromGeneralBroadcaster);
+        newSocket.off('general-stream-access-denied', onGeneralStreamAccessDenied);
+
+        newSocket.off('private-call-invite-from-admin', onPrivateCallInviteFromAdmin);
+        newSocket.off('private-sdp-offer-received', onPrivateSdpOfferReceived);
+        newSocket.off('private-ice-candidate-received', onPrivateIceCandidateReceived);
+        newSocket.off('private-call-terminated-by-admin', onPrivateCallTerminatedByAdmin);
+
         newSocket.disconnect();
-        setSocket(null);
       };
     }
   }, [loggedInUserId, siteSettings, isLoadingSiteSettings]);
 
-  // -------- Socket event handlers --------
-  useEffect(() => {
-    if (!socket) return;
+  // --- 7) Socket Event Handlers ---
 
-    const onConnect = () => {
-      console.log('HomePage: Socket conectado:', socket.id);
-      if (!isUserInPrivateCall) socket.emit('register-general-viewer');
-    };
-    const onConnectError = (error: Error) => {
-      console.error('HomePage: Error de conexión socket:', error);
-      toast({ variant: 'destructive', title: 'Socket Connection Error', description: error.message });
-    };
-    const onDisconnect = (reason: string) => {
-      console.log(`HomePage: Socket desconectado. Reason: ${reason}. Stream activo: ${isGeneralStreamLive}, En llamada privada: ${isUserInPrivateCall}`);
-      if (reason !== 'io client disconnect') {
-        toast({ variant: 'destructive', title: 'Socket Disconnected', description: `Reason: ${reason}` });
-      }
+  // ** onConnect **
+  function onConnect() {
+    console.log('HomePage: Socket conectado:', socket?.id);
+    if (!isUserInPrivateCall) {
+      socket!.emit('register-general-viewer');
+      socket!.emit('check-active-broadcast');
+    }
+  }
 
-      // Reset general stream state
-      setIsGeneralStreamLive(false);
-      setGeneralStreamReceived(null);
-      setCurrentGeneralStreamIsLoggedInOnly(false);
-      setIsLoadingGeneralStream(false);
-      if (peerConnectionForGeneralStreamRef.current) {
-        peerConnectionForGeneralStreamRef.current.close();
-        peerConnectionForGeneralStreamRef.current = null;
-      }
-      setCurrentBroadcasterId(null);
-      setGeneralStreamWebRtcError(null);
+  // ** onConnectError **
+  function onConnectError(error: Error) {
+    console.error('HomePage: Error de conexión socket:', error);
+    toast({ variant: 'destructive', title: 'Socket Connection Error', description: error.message });
+  }
 
-      // Si está en llamada privada, limpiamos sin notificar al servidor
-      if (isUserInPrivateCall) handleEndPrivateCall(false, `Socket disconnected: ${reason}`);
-    };
+  // ** onDisconnect **
+  function onDisconnect(reason: string) {
+    console.log(`HomePage: Socket desconectado. Reason: ${reason}. Stream active: ${isGeneralStreamLive}, In private call: ${isUserInPrivateCall}`);
+    if (reason !== 'io client disconnect') {
+      toast({ variant: 'destructive', title: 'Socket Disconnected', description: `Reason: ${reason}` });
+    }
 
-    const onGeneralBroadcasterReady = ({
+    // Reset general stream state
+    setIsGeneralStreamLive(false);
+    setGeneralStreamReceived(null);
+    setCurrentGeneralStreamIsLoggedInOnly(false);
+    setIsLoadingGeneralStream(false);
+    setGeneralStreamWebRtcError(null);
+    setCurrentBroadcasterId(null);
+    if (peerConnectionForGeneralStreamRef.current) {
+      peerConnectionForGeneralStreamRef.current.close();
+      peerConnectionForGeneralStreamRef.current = null;
+    }
+
+    // If in private call, clean up without notifying server
+    if (isUserInPrivateCall) handleEndPrivateCall(false, `Socket disconnected: ${reason}`);
+  }
+
+  // ** onGeneralBroadcasterReady **
+  function onGeneralBroadcasterReady({
+    broadcasterId,
+    streamTitle: titleFromServer,
+    streamSubtitle: subtitleFromServer,
+    isLoggedInOnly
+  }: {
+    broadcasterId: string;
+    streamTitle?: string;
+    streamSubtitle?: string;
+    isLoggedInOnly?: boolean;
+  }) {
+    console.log('HomePage: Evento general-broadcaster-ready recibido:', {
       broadcasterId,
-      streamTitle: titleFromServer,
-      streamSubtitle: subtitleFromServer,
+      titleFromServer,
+      subtitleFromServer,
       isLoggedInOnly
-    }: {
-      broadcasterId: string;
-      streamTitle?: string;
-      streamSubtitle?: string;
-      isLoggedInOnly?: boolean;
-    }) => {
-      console.log('HomePage: Evento general-broadcaster-ready recibido:', {
-        broadcasterId,
-        titleFromServer,
-        subtitleFromServer,
-        isLoggedInOnly
-      });
+    });
 
-      // Si hay WebRTC activo, cerrarlo
-      if (
-        peerConnectionForGeneralStreamRef.current &&
-        peerConnectionForGeneralStreamRef.current.signalingState !== 'closed'
-      ) {
-        console.log('HomePage: Cerrando PC existente en general-broadcaster-ready.');
+    // 1) Close existing PC if any
+    if (
+      peerConnectionForGeneralStreamRef.current &&
+      peerConnectionForGeneralStreamRef.current.signalingState !== 'closed'
+    ) {
+      peerConnectionForGeneralStreamRef.current.close();
+      peerConnectionForGeneralStreamRef.current = null;
+    }
+
+    // 2) Update state
+    setCurrentGeneralStreamIsLoggedInOnly(isLoggedInOnly || false);
+    setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
+    setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
+    setIsGeneralStreamLive(true);
+    setGeneralStreamWebRtcError(null);
+    setGeneralStreamReceived(null);
+    setIsLoadingGeneralStream(true);
+    setCurrentBroadcasterId(broadcasterId);
+    setRetryCount(0);
+
+    // 3) Access control: if only for logged in and user not logged in
+    if (isLoggedInOnly && !loggedInUserId) {
+      toast({
+        variant: 'destructive',
+        title: t('homepage.live.accessDenied'),
+        description: t('homepage.live.accessDeniedDescription')
+      });
+      if (retryCount < maxRetries) {
+        setTimeout(() => {
+          setRetryCount((prev) => prev + 1);
+          socket!.emit('check-active-broadcast');
+        }, 2000);
+      }
+      setIsLoadingGeneralStream(false);
+      return;
+    }
+
+    // 4) Always register as viewer
+    socket!.emit('register-general-viewer');
+  }
+
+  // ** onGeneralStreamEnded **
+  function onGeneralStreamEnded() {
+    console.log("HomePage: Evento 'general-stream-ended' recibido.");
+    if (isUserInPrivateCall) {
+      console.log("HomePage: En llamada privada, ignorando 'general-stream-ended'.");
+      return;
+    }
+    setIsGeneralStreamLive(false);
+    setGeneralStreamReceived(null);
+    setCurrentGeneralStreamIsLoggedInOnly(false);
+    setIsLoadingGeneralStream(false);
+    setCurrentBroadcasterId(null);
+    if (peerConnectionForGeneralStreamRef.current) {
+      peerConnectionForGeneralStreamRef.current.close();
+      peerConnectionForGeneralStreamRef.current = null;
+    }
+    setGeneralStreamWebRtcError(null);
+    setGeneralStreamTitle(siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
+    setGeneralStreamSubtitle(siteSettings?.liveStreamSubtitle || '');
+  }
+
+  // ** onOfferFromGeneralBroadcaster **
+  async function onOfferFromGeneralBroadcaster({
+    broadcasterId,
+    offer
+  }: {
+    broadcasterId: string;
+    offer: RTCSessionDescriptionInit;
+  }) {
+    console.log(`HomePage: Evento 'offer-from-general-broadcaster' recibido. BroadcasterId: ${broadcasterId}`);
+
+    // Conditions to ignore
+    if (isUserInPrivateCall || !socket || !socket.connected) {
+      console.log('HomePage: Ignorando offer - en llamada privada o socket no listo.');
+      return;
+    }
+    if (currentGeneralStreamIsLoggedInOnly && !loggedInUserId) {
+      socket.emit('general-stream-access-denied', { message: 'This live stream is for registered users only.' });
+      setIsGeneralStreamLive(false);
+      setIsLoadingGeneralStream(false);
+      return;
+    }
+
+    // 1) Close existing PC
+    if (
+      peerConnectionForGeneralStreamRef.current &&
+      peerConnectionForGeneralStreamRef.current.signalingState !== 'closed'
+    ) {
+      console.log('HomePage: Cerrando PC existente antes de procesar nuevo offer.');
+      peerConnectionForGeneralStreamRef.current.close();
+      peerConnectionForGeneralStreamRef.current = null;
+    }
+
+    // 2) Create new RTCPeerConnection
+    const pc = new RTCPeerConnection(PC_CONFIG);
+    peerConnectionForGeneralStreamRef.current = pc;
+    console.log('HomePage: Nueva RTCPeerConnection para general stream.');
+
+    pc.ontrack = (event) => {
+      console.log('HomePage (General Stream): ontrack evt. Streams:', event.streams);
+      if (event.streams[0]) {
+        console.log('HomePage (General Stream): Received remote stream ID:', event.streams[0].id);
+        setGeneralStreamReceived(event.streams[0]);
+      } else {
+        console.warn('HomePage (General Stream): ontrack but no stream[0].');
+      }
+    };
+    pc.onicecandidate = (event) => {
+      if (event.candidate && socket.connected) {
+        console.log('HomePage (General Stream): Enviando ICE candidate a broadcaster:', broadcasterId);
+        try {
+          socket.emit('general-stream-candidate-to-broadcaster', { broadcasterId, candidate: event.candidate });
+        } catch (e: any) {
+          console.error('HomePage: Error emitiendo ICE a broadcaster:', e.message);
+        }
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      if (peerConnectionForGeneralStreamRef.current) {
+        const state = peerConnectionForGeneralStreamRef.current.connectionState;
+        console.log('HomePage (General Stream): PC connection state:', state);
+        if (state === 'connected') {
+          setGeneralStreamWebRtcError(null);
+        } else if (['failed', 'disconnected', 'closed'].includes(state)) {
+          console.log('HomePage (General Stream): PC connection failed/disconnected/closed.');
+          setGeneralStreamWebRtcError(t('homepage.live.connectionLostError'));
+          setIsGeneralStreamLive(false);
+          setGeneralStreamReceived(null);
+          setIsLoadingGeneralStream(false);
+        }
+      }
+    };
+
+    // 3) Set remote description and create/send answer
+    try {
+      console.log('HomePage (General Stream): Setting remote description (offer).');
+      await peerConnectionForGeneralStreamRef.current.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnectionForGeneralStreamRef.current.createAnswer();
+      await peerConnectionForGeneralStreamRef.current.setLocalDescription(answer);
+      if (socket.connected) {
+        console.log('HomePage (General Stream): Enviando answer a broadcaster.');
+        socket.emit('general-stream-answer-to-broadcaster', { broadcasterId, answer });
+      }
+    } catch (error: any) {
+      console.error('HomePage (General Stream): Error al manejar offer:', error);
+      setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError'));
+      setIsLoadingGeneralStream(false);
+    }
+  }
+
+  // ** onCandidateFromGeneralBroadcaster **
+  async function onCandidateFromGeneralBroadcaster({ candidate }: { candidate: RTCIceCandidateInit }) {
+    console.log("HomePage: Evento 'candidate-from-general-broadcaster' recibido.");
+    if (
+      isUserInPrivateCall ||
+      !peerConnectionForGeneralStreamRef.current ||
+      !candidate ||
+      !peerConnectionForGeneralStreamRef.current.remoteDescription
+    ) {
+      console.log('HomePage: Ignorando candidate - condiciones no cumplidas.');
+      return;
+    }
+    try {
+      await peerConnectionForGeneralStreamRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log('HomePage: Agregado ICE candidate desde broadcaster.');
+    } catch (error: any) {
+      console.error('HomePage: Error al agregar ICE candidate desde broadcaster:', candidate, error.message);
+    }
+  }
+
+  // ** onGeneralStreamAccessDenied **
+  function onGeneralStreamAccessDenied({ message }: { message: string }) {
+    console.log("HomePage: Evento 'general-stream-access-denied' recibido. Mensaje:", message);
+    setIsGeneralStreamLive(false);
+    setGeneralStreamReceived(null);
+    setIsLoadingGeneralStream(false);
+    setCurrentGeneralStreamIsLoggedInOnly(true);
+    toast({
+      title: t('homepage.live.accessDenied'),
+      description: message || t('homepage.live.accessDeniedDescription'),
+      variant: 'destructive'
+    });
+  }
+
+  // ** onPrivateCallInviteFromAdmin **
+  const onPrivateCallInviteFromAdmin = async ({
+    adminSocketId: adSocketId,
+    adminAppUserId
+  }: {
+    adminSocketId: string;
+    adminAppUserId: string;
+  }) => {
+    console.log("HomePage: Evento 'private-call-invite-from-admin' recibido. AdminSocketId:", adSocketId);
+    // Ensure authorized user and not already in private call
+    if (
+      loggedInUserId &&
+      siteSettings?.liveStreamAuthorizedUserId === loggedInUserId &&
+      !isUserInPrivateCall
+    ) {
+      // Close general stream PC
+      if (peerConnectionForGeneralStreamRef.current) {
+        console.log('HomePage: Cerrando PC general debido a invite de call privada.');
         peerConnectionForGeneralStreamRef.current.close();
         peerConnectionForGeneralStreamRef.current = null;
       }
-
-      setCurrentGeneralStreamIsLoggedInOnly(isLoggedInOnly || false);
       setGeneralStreamReceived(null);
-      setIsLoadingGeneralStream(true);
+      setIsGeneralStreamLive(false);
+      setIsLoadingGeneralStream(false);
 
-      // Si es sólo logueados y no estoy logueado, denegar
-      if (isLoggedInOnly && !loggedInUserId) {
-        setIsGeneralStreamLive(false);
-        setGeneralStreamReceived(null);
-        setIsLoadingGeneralStream(false);
-        setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-        setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
+      setPrivateCallAdminSocketId(adSocketId);
+      setPrivateCallStatusMessage(t('homepage.privateCall.statusIncoming'));
+      setIsUserInPrivateCall(true);
+      setIsLoadingPrivateCallVideo(true);
+
+      // Try to get user media
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        console.log('[PrivateCall] Got stream. Tracks:', {
+          audio: stream.getAudioTracks().map((t) => ({ id: t.id, enabled: t.enabled, state: t.readyState })),
+          video: stream.getVideoTracks().map((t) => ({ id: t.id, enabled: t.enabled, state: t.readyState }))
+        });
+
+        setHasCallCameraPermission(true);
+        setUserLocalStreamForCall(stream);
+        if (stream.getTracks().length === 0) {
+          console.warn('[PrivateCall] No live tracks in user media.');
+        }
+        stream.getAudioTracks().forEach((t) => (t.enabled = !isUserMicMuted));
+        stream.getVideoTracks().forEach((t) => (t.enabled = !isUserVideoOff));
+
+        // Close existing private PC if present
+        if (
+          peerConnectionForPrivateCallRef.current &&
+          peerConnectionForPrivateCallRef.current.signalingState !== 'closed'
+        ) {
+          console.log('HomePage: Cerrando PC privada existente antes de nueva llamada.');
+          peerConnectionForPrivateCallRef.current.close();
+          peerConnectionForPrivateCallRef.current = null;
+        }
+        peerConnectionForPrivateCallRef.current = new RTCPeerConnection(PC_CONFIG);
+        console.log('HomePage: Nueva RTCPeerConnection creada para llamada privada.');
+
+        const validTracks = stream.getTracks().filter((track) => track.readyState === 'live');
+        if (validTracks.length === 0) {
+          console.warn('HomePage: No hay tracks vivas en user media. Abortando llamada.');
+          setPrivateCallStatusMessage(t('homepage.privateCall.statusFailed'));
+          handleEndPrivateCall(false, 'No live user tracks');
+          return;
+        }
+        validTracks.forEach((track) => {
+          try {
+            peerConnectionForPrivateCallRef.current!.addTrack(track, stream);
+            console.log('HomePage: Added local track to private call PC:', track.kind);
+          } catch (e: any) {
+            console.error('HomePage: Error adding local track to private PC:', track.kind, e.message);
+          }
+        });
+
+        peerConnectionForPrivateCallRef.current.onicecandidate = (event) => {
+          if (event.candidate && socket && socket.connected) {
+            console.log('HomePage: Sending private ICE candidate to admin:', adSocketId);
+            try {
+              socket.emit('private-ice-candidate', { targetSocketId: adSocketId, candidate: event.candidate });
+            } catch (e: any) {
+              console.error('HomePage: Error emitting private ICE:', e.message);
+            }
+          }
+        };
+        peerConnectionForPrivateCallRef.current.ontrack = (event) => {
+          console.log('HomePage (Private Call): ontrack evt from admin. Streams:', event.streams);
+          if (event.streams[0]) {
+            console.log('HomePage (Private Call): Received remote admin stream ID:', event.streams[0].id);
+            setAdminStreamForCall(event.streams[0]);
+          } else {
+            console.warn('HomePage (Private Call): ontrack but no stream[0].');
+          }
+        };
+        peerConnectionForPrivateCallRef.current.onconnectionstatechange = () => {
+          if (peerConnectionForPrivateCallRef.current) {
+            const state = peerConnectionForPrivateCallRef.current.connectionState;
+            console.log(`HomePage (Private Call): PC state changed to: ${state}`);
+            if (state === 'connected') {
+              setPrivateCallStatusMessage(t('homepage.privateCall.statusConnected'));
+              setIsLoadingPrivateCallVideo(false);
+            } else if (['failed', 'disconnected', 'closed'].includes(state)) {
+              if (isUserInPrivateCall) handleEndPrivateCall(false, `PC state: ${state}`);
+            }
+          }
+        };
+
+        // Send ACK to server for invite
+        socket!.emit('private-call-invite-ack', { adminSocketId: adSocketId });
+
+        // Now accept the call
+        if (socket && socket.connected) {
+          socket.emit('user-accepts-private-call', { adminSocketId: adSocketId });
+          setPrivateCallStatusMessage(t('homepage.privateCall.statusConnecting'));
+          console.log('HomePage: Emitted user-accepts-private-call to admin:', adSocketId);
+        } else {
+          setPrivateCallStatusMessage(`${t('homepage.privateCall.statusFailed')} (Socket Error)`);
+          handleEndPrivateCall(false, 'Socket disconnected before accepting call');
+        }
+      } catch (error) {
+        console.error('HomePage: Error getting user media:', error);
+        setPrivateCallStatusMessage(t('homepage.privateCall.cameraError'));
         toast({
-          title: t('homepage.live.accessDenied'),
-          description: t('homepage.live.accessDeniedDescription'),
+          title: t('homepage.privateCall.cameraPermissionErrorTitle'),
+          description: t('homepage.privateCall.cameraPermissionErrorDescription'),
           variant: 'destructive'
         });
-        return;
+        setHasCallCameraPermission(false);
+        setUserLocalStreamForCall(null);
+        handleEndPrivateCall(false, 'Error getting user media');
       }
-
-      // Si estoy en llamada privada, ignorar
-      if (isUserInPrivateCall) {
-        console.log('HomePage: En llamada privada, ignorando general-broadcaster-ready.');
-        setIsLoadingGeneralStream(false);
-        return;
-      }
-
-      // Si cambió el broadcaster, registrarse
-      if (broadcasterId !== currentBroadcasterId) {
-        setCurrentBroadcasterId(broadcasterId);
-        setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-        setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
-        setIsGeneralStreamLive(true);
-        setGeneralStreamWebRtcError(null);
-
-        if (socket && socket.connected) {
-          console.log('HomePage: Registrándose como viewer en general-broadcaster-ready.');
-          socket.emit('register-general-viewer');
+    } else {
+      console.log(
+        'HomePage: Ignorando private-call-invite-from-admin. Conditions not met:',
+        {
+          loggedInUserId,
+          authorizedForStream: siteSettings?.liveStreamAuthorizedUserId,
+          isUserInPrivateCall
         }
-      } else {
-        console.log('HomePage: Ya registrado para este broadcasterId, ignorando.');
-      }
-    };
+      );
+    }
+  };
 
-    const onGeneralStreamEnded = () => {
-      console.log("HomePage: Evento 'general-stream-ended' recibido.");
-      if (isUserInPrivateCall) {
-        console.log("HomePage: En llamada privada, ignorando 'general-stream-ended'.");
-        return;
-      }
-      setIsGeneralStreamLive(false);
-      setGeneralStreamReceived(null);
-      setCurrentGeneralStreamIsLoggedInOnly(false);
-      setIsLoadingGeneralStream(false);
-      setCurrentBroadcasterId(null);
-      if (peerConnectionForGeneralStreamRef.current) {
-        peerConnectionForGeneralStreamRef.current.close();
-        peerConnectionForGeneralStreamRef.current = null;
-      }
-      setGeneralStreamWebRtcError(null);
-      setGeneralStreamTitle(siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-      setGeneralStreamSubtitle(siteSettings?.liveStreamSubtitle || '');
-    };
-
-    const onGeneralBroadcasterDisconnected = onGeneralStreamEnded;
-
-    const onOfferFromGeneralBroadcaster = async ({
-      broadcasterId,
-      offer
-    }: {
-      broadcasterId: string;
-      offer: RTCSessionDescriptionInit;
-    }) => {
-      console.log(`HomePage: Evento 'offer-from-general-broadcaster' recibido. BroadcasterId: ${broadcasterId}`);
-
-      // Condiciones de ignorar
-      if (isUserInPrivateCall || !socket || !socket.connected) {
-        console.log('HomePage: Ignorando offer - en llamada privada o socket no listo.');
-        return;
-      }
-      if (currentGeneralStreamIsLoggedInOnly && !loggedInUserId) {
-        socket.emit('general-stream-access-denied', { message: 'This live stream is for registered users only.' });
-        setIsGeneralStreamLive(false);
-        setIsLoadingGeneralStream(false);
-        return;
-      }
-
-      if (
-        peerConnectionForGeneralStreamRef.current &&
-        peerConnectionForGeneralStreamRef.current.signalingState !== 'closed'
-      ) {
-        console.log('HomePage: Cerrando PC existente antes de procesar nuevo offer.');
-        peerConnectionForGeneralStreamRef.current.close();
-        peerConnectionForGeneralStreamRef.current = null;
-      }
-      peerConnectionForGeneralStreamRef.current = new RTCPeerConnection(PC_CONFIG);
-      console.log('HomePage: Nueva RTCPeerConnection para general stream.');
-
-      peerConnectionForGeneralStreamRef.current.ontrack = (event) => {
-        console.log('HomePage (General Stream): ontrack evt. Streams:', event.streams);
-        if (event.streams[0]) {
-          console.log('HomePage (General Stream): Recibido remote stream ID:', event.streams[0].id);
-          setGeneralStreamReceived(event.streams[0]);
-        } else {
-          console.warn('HomePage (General Stream): ontrack pero sin stream[0].');
-        }
-      };
-      peerConnectionForGeneralStreamRef.current.onicecandidate = (event) => {
-        if (event.candidate && socket.connected) {
-          console.log('HomePage (General Stream): Enviando ICE candidate a broadcaster:', broadcasterId);
-          try {
-            socket.emit('general-stream-candidate-to-broadcaster', { broadcasterId, candidate: event.candidate });
-          } catch (e: any) {
-            console.error('HomePage: Error emitiendo ICE a broadcaster:', e.message);
-          }
-        }
-      };
-      peerConnectionForGeneralStreamRef.current.onconnectionstatechange = () => {
-        if (peerConnectionForGeneralStreamRef.current) {
-          const state = peerConnectionForGeneralStreamRef.current.connectionState;
-          console.log('HomePage (General Stream): PC connection state:', state);
-          if (state === 'connected') {
-            setGeneralStreamWebRtcError(null);
-          } else if (['failed', 'disconnected', 'closed'].includes(state)) {
-            console.log('HomePage (General Stream): PC connection fallida/desconectada/cerrada.');
-            setGeneralStreamWebRtcError(t('homepage.live.connectionLostError'));
-            setIsGeneralStreamLive(false);
-            setGeneralStreamReceived(null);
-            setIsLoadingGeneralStream(false);
-          }
-        }
-      };
-
+  // ** onPrivateSdpOfferReceived **
+  const onPrivateSdpOfferReceived = async ({
+    senderSocketId,
+    offer
+  }: {
+    senderSocketId: string;
+    offer: RTCSessionDescriptionInit;
+  }) => {
+    console.log('HomePage: Evento private-sdp-offer-received de senderSocketId:', senderSocketId);
+    if (
+      isUserInPrivateCall &&
+      senderSocketId === privateCallAdminSocketId &&
+      peerConnectionForPrivateCallRef.current &&
+      socket &&
+      socket.connected
+    ) {
       try {
-        console.log('HomePage (General Stream): Setting remote description (offer).');
-        await peerConnectionForGeneralStreamRef.current.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await peerConnectionForGeneralStreamRef.current.createAnswer();
-        await peerConnectionForGeneralStreamRef.current.setLocalDescription(answer);
+        console.log('HomePage (Private Call): Setting remote description (offer from admin).');
+        await peerConnectionForPrivateCallRef.current.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnectionForPrivateCallRef.current.createAnswer();
+        await peerConnectionForPrivateCallRef.current.setLocalDescription(answer);
         if (socket.connected) {
-          console.log('HomePage (General Stream): Enviando answer a broadcaster.');
-          socket.emit('general-stream-answer-to-broadcaster', { broadcasterId, answer });
+          socket.emit('private-sdp-answer', { targetSocketId: senderSocketId, answer });
+          console.log('HomePage (Private Call): Sent SDP answer to admin:', senderSocketId);
+        } else {
+          setPrivateCallStatusMessage(`${t('homepage.privateCall.statusFailed')} (Socket Error)`);
+          handleEndPrivateCall(false, 'Socket disconnected before sending SDP answer');
         }
       } catch (error: any) {
-        console.error('HomePage (General Stream): Error al manejar offer:', error);
-        setGeneralStreamWebRtcError(t('homepage.live.webrtcSetupError'));
-        setIsLoadingGeneralStream(false);
+        console.error('HomePage (Private Call): Error handling SDP offer:', error);
+        setPrivateCallStatusMessage(t('homepage.privateCall.statusFailed'));
+        handleEndPrivateCall(false, 'Error handling SDP offer');
       }
-    };
+    } else {
+      console.log(
+        'HomePage: Ignoring private-sdp-offer-received. Conditions not met.',
+        {
+          isUserInPrivateCall,
+          senderMatch: senderSocketId === privateCallAdminSocketId,
+          pcExists: !!peerConnectionForPrivateCallRef.current
+        }
+      );
+    }
+  };
 
-    const onCandidateFromGeneralBroadcaster = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-      console.log("HomePage: Evento 'candidate-from-general-broadcaster' recibido.");
-      if (
-        isUserInPrivateCall ||
-        !peerConnectionForGeneralStreamRef.current ||
-        !candidate ||
-        !peerConnectionForGeneralStreamRef.current.remoteDescription
-      ) {
-        console.log('HomePage: Ignorando candidate - condiciones no cumplidas.');
-        return;
-      }
+  // ** onPrivateIceCandidateReceived **
+  const onPrivateIceCandidateReceived = async ({
+    senderSocketId,
+    candidate
+  }: {
+    senderSocketId: string;
+    candidate: RTCIceCandidateInit;
+  }) => {
+    console.log('HomePage: Evento private-ice-candidate-received de senderSocketId:', senderSocketId);
+    if (
+      isUserInPrivateCall &&
+      senderSocketId === privateCallAdminSocketId &&
+      peerConnectionForPrivateCallRef.current &&
+      candidate &&
+      peerConnectionForPrivateCallRef.current.remoteDescription
+    ) {
       try {
-        await peerConnectionForGeneralStreamRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-        console.log('HomePage: Agregado ICE candidate desde broadcaster.');
+        await peerConnectionForPrivateCallRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log('HomePage: Added ICE candidate for private call from admin.');
       } catch (error: any) {
-        console.error('HomePage: Error al agregar ICE candidate desde broadcaster:', candidate, error.message);
+        console.error('HomePage: Error adding ICE candidate for private call:', candidate, error.message);
       }
-    };
+    } else {
+      console.log(
+        'HomePage: Ignoring private-ice-candidate-received. Conditions not met.',
+        {
+          isUserInPrivateCall,
+          senderMatch: senderSocketId === privateCallAdminSocketId,
+          pcExists: !!peerConnectionForPrivateCallRef.current,
+          remoteDesc: !!peerConnectionForPrivateCallRef.current?.remoteDescription
+        }
+      );
+    }
+  };
 
-    const onGeneralStreamAccessDenied = ({ message }: { message: string }) => {
-      console.log("HomePage: Evento 'general-stream-access-denied' recibido. Mensaje:", message);
-      setIsGeneralStreamLive(false);
-      setGeneralStreamReceived(null);
-      setIsLoadingGeneralStream(false);
-      setCurrentGeneralStreamIsLoggedInOnly(true);
+  // ** onPrivateCallTerminatedByAdmin **
+  const onPrivateCallTerminatedByAdmin = () => {
+    console.log("HomePage: Evento 'private-call-terminated-by-admin' recibido.");
+    if (isUserInPrivateCall) {
       toast({
-        title: t('homepage.live.accessDenied'),
-        description: message || t('homepage.live.accessDeniedDescription'),
-        variant: 'destructive'
+        title: t('homepage.privateCall.callEndedTitle'),
+        description: t('homepage.privateCall.adminEndedCallDesc'),
+        variant: 'default'
       });
-    };
+      handleEndPrivateCall(false, 'Call terminated by admin');
+    }
+  };
 
-    const onPrivateCallInviteFromAdmin = async ({
-      adminSocketId: adSocketId,
-      adminAppUserId
-    }: {
-      adminSocketId: string;
-      adminAppUserId: string;
-    }) => {
-      console.log("HomePage: Evento 'private-call-invite-from-admin' recibido. AdminSocketId:", adSocketId);
-      // Verificamos que somos usuario autorizado y no estamos en llamada
-      if (
-        loggedInUserId &&
-        siteSettings?.liveStreamAuthorizedUserId === loggedInUserId &&
-        !isUserInPrivateCall
-      ) {
-        // Cerrar general stream
-        if (peerConnectionForGeneralStreamRef.current) {
-          console.log('HomePage: Cerrando PC general debido a invite de call privada.');
-          peerConnectionForGeneralStreamRef.current.close();
-          peerConnectionForGeneralStreamRef.current = null;
-        }
-        setGeneralStreamReceived(null);
-        setIsGeneralStreamLive(false);
-        setIsLoadingGeneralStream(false);
-
-        setPrivateCallAdminSocketId(adSocketId);
-        setPrivateCallStatusMessage(t('homepage.privateCall.statusIncoming'));
-        setIsUserInPrivateCall(true);
-        setIsLoadingPrivateCallVideo(true);
-
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          console.log(`[PrivateCall] Got stream. Tracks:`, {
-            audio: stream.getAudioTracks().map((t) => ({ id: t.id, enabled: t.enabled, state: t.readyState })),
-            video: stream.getVideoTracks().map((t) => ({ id: t.id, enabled: t.enabled, state: t.readyState }))
-          });
-
-          setHasCallCameraPermission(true);
-          setUserLocalStreamForCall(stream);
-          if (stream.getTracks().length === 0) {
-            console.warn('[PrivateCall] No live tracks en user media.');
-          }
-          stream.getAudioTracks().forEach((t) => (t.enabled = !isUserMicMuted));
-          stream.getVideoTracks().forEach((t) => (t.enabled = !isUserVideoOff));
-
-          if (
-            peerConnectionForPrivateCallRef.current &&
-            peerConnectionForPrivateCallRef.current.signalingState !== 'closed'
-          ) {
-            console.log('HomePage: Cerrando PC privada existente antes de nueva llamada.');
-            peerConnectionForPrivateCallRef.current.close();
-            peerConnectionForPrivateCallRef.current = null;
-          }
-          peerConnectionForPrivateCallRef.current = new RTCPeerConnection(PC_CONFIG);
-          console.log('HomePage: Nueva RTCPeerConnection creada para llamada privada.');
-
-          const validTracks = stream.getTracks().filter((track) => track.readyState === 'live');
-          if (validTracks.length === 0) {
-            console.warn('HomePage: No hay tracks vivas en user media. Abortando llamada.');
-            setPrivateCallStatusMessage(t('homepage.privateCall.statusFailed'));
-            handleEndPrivateCall(false, 'No live user tracks');
-            return;
-          }
-          validTracks.forEach((track) => {
-            try {
-              peerConnectionForPrivateCallRef.current!.addTrack(track, stream);
-              console.log('HomePage: Añadido track local al PC de llamada privada:', track.kind);
-            } catch (e: any) {
-              console.error('HomePage: Error añadiendo track local al PC privado:', track.kind, e.message);
-            }
-          });
-
-          peerConnectionForPrivateCallRef.current.onicecandidate = (event) => {
-            if (event.candidate && socket && socket.connected) {
-              console.log('HomePage: Enviando ICE candidate privado al admin:', adSocketId);
-              try {
-                socket.emit('private-ice-candidate', { targetSocketId: adSocketId, candidate: event.candidate });
-              } catch (e: any) {
-                console.error('HomePage: Error emitiendo ICE privado:', e.message);
-              }
-            }
-          };
-          peerConnectionForPrivateCallRef.current.ontrack = (event) => {
-            console.log('HomePage (Private Call): ontrack evt from admin. Streams:', event.streams);
-            if (event.streams[0]) {
-              console.log('HomePage (Private Call): Recibido remote admin stream ID:', event.streams[0].id);
-              setAdminStreamForCall(event.streams[0]);
-            } else {
-              console.warn('HomePage (Private Call): ontrack pero sin stream[0].');
-            }
-          };
-          peerConnectionForPrivateCallRef.current.onconnectionstatechange = () => {
-            if (peerConnectionForPrivateCallRef.current) {
-              const state = peerConnectionForPrivateCallRef.current.connectionState;
-              console.log(`HomePage (Private Call): PC estado cambiado a: ${state}`);
-              if (state === 'connected') {
-                setPrivateCallStatusMessage(t('homepage.privateCall.statusConnected'));
-                setIsLoadingPrivateCallVideo(false);
-              } else if (['failed', 'disconnected', 'closed'].includes(state)) {
-                if (isUserInPrivateCall) handleEndPrivateCall(false, `PC state: ${state}`);
-              }
-            }
-          };
-          if (socket && socket.connected) {
-            socket.emit('user-accepts-private-call', { adminSocketId: adSocketId });
-            setPrivateCallStatusMessage(t('homepage.privateCall.statusConnecting'));
-            console.log('HomePage: Emitido user-accepts-private-call to admin:', adSocketId);
-          } else {
-            setPrivateCallStatusMessage(`${t('homepage.privateCall.statusFailed')} (Socket Error)`);
-            handleEndPrivateCall(false, 'Socket disconnected before accepting call');
-          }
-        } catch (error) {
-          console.error('HomePage: Error al obtener user media:', error);
-          setPrivateCallStatusMessage(t('homepage.privateCall.cameraError'));
-          toast({
-            title: t('homepage.privateCall.cameraPermissionErrorTitle'),
-            description: t('homepage.privateCall.cameraPermissionErrorDescription'),
-            variant: 'destructive'
-          });
-          setHasCallCameraPermission(false);
-          setUserLocalStreamForCall(null);
-          handleEndPrivateCall(false, 'Error obteniendo user media');
-        }
-      } else {
-        console.log(
-          'HomePage: Ignorando private-call-invite-from-admin. Condiciones no cumplidas:',
-          {
-            loggedInUserId,
-            authorizedForStream: siteSettings?.liveStreamAuthorizedUserId,
-            isUserInPrivateCall
-          }
-        );
-      }
-    };
-
-    const onPrivateSdpOfferReceived = async ({
-      senderSocketId,
-      offer
-    }: {
-      senderSocketId: string;
-      offer: RTCSessionDescriptionInit;
-    }) => {
-      console.log('HomePage: Evento private-sdp-offer-received de senderSocketId:', senderSocketId);
-      if (
-        isUserInPrivateCall &&
-        senderSocketId === privateCallAdminSocketId &&
-        peerConnectionForPrivateCallRef.current &&
-        socket &&
-        socket.connected
-      ) {
-        try {
-          console.log('HomePage (Private Call): Setting remote description (offer from admin).');
-          await peerConnectionForPrivateCallRef.current.setRemoteDescription(new RTCSessionDescription(offer));
-          const answer = await peerConnectionForPrivateCallRef.current.createAnswer();
-          await peerConnectionForPrivateCallRef.current.setLocalDescription(answer);
-          if (socket.connected) {
-            socket.emit('private-sdp-answer', { targetSocketId: senderSocketId, answer });
-            console.log('HomePage (Private Call): SDP answer enviado a admin:', senderSocketId);
-          } else {
-            setPrivateCallStatusMessage(`${t('homepage.privateCall.statusFailed')} (Socket Error)`);
-            handleEndPrivateCall(false, 'Socket disconnected antes de enviar SDP answer');
-          }
-        } catch (error: any) {
-          console.error('HomePage (Private Call): Error al manejar SDP offer:', error);
-          setPrivateCallStatusMessage(t('homepage.privateCall.statusFailed'));
-          handleEndPrivateCall(false, 'Error manejando SDP offer');
-        }
-      } else {
-        console.log(
-          'HomePage: Ignorando private-sdp-offer-received. Condiciones no cumplidas.',
-          {
-            isUserInPrivateCall,
-            senderMatch: senderSocketId === privateCallAdminSocketId,
-            pcExists: !!peerConnectionForPrivateCallRef.current
-          }
-        );
-      }
-    };
-
-    const onPrivateIceCandidateReceived = async ({
-      senderSocketId,
-      candidate
-    }: {
-      senderSocketId: string;
-      candidate: RTCIceCandidateInit;
-    }) => {
-      console.log('HomePage: Evento private-ice-candidate-received de senderSocketId:', senderSocketId);
-      if (
-        isUserInPrivateCall &&
-        senderSocketId === privateCallAdminSocketId &&
-        peerConnectionForPrivateCallRef.current &&
-        candidate &&
-        peerConnectionForPrivateCallRef.current.remoteDescription
-      ) {
-        try {
-          await peerConnectionForPrivateCallRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-          console.log('HomePage: Agregado ICE candidate para llamada privada desde admin.');
-        } catch (error: any) {
-          console.error('HomePage: Error al agregar ICE candidate para llamada privada:', candidate, error.message);
-        }
-      } else {
-        console.log(
-          'HomePage: Ignorando private-ice-candidate-received. Condiciones no cumplidas.',
-          {
-            isUserInPrivateCall,
-            senderMatch: senderSocketId === privateCallAdminSocketId,
-            pcExists: !!peerConnectionForPrivateCallRef.current,
-            remoteDesc: !!peerConnectionForPrivateCallRef.current?.remoteDescription
-          }
-        );
-      }
-    };
-
-    const onPrivateCallTerminatedByAdmin = () => {
-      console.log("HomePage: Evento 'private-call-terminated-by-admin' recibido.");
-      if (isUserInPrivateCall) {
-        toast({ title: t('homepage.privateCall.callEndedTitle'), description: t('homepage.privateCall.adminEndedCallDesc'), variant: 'default' });
-        handleEndPrivateCall(false, 'Call terminated by admin');
-      }
-    };
-
-    const onForceViewersReconnect = ({
+  // ** onForceViewersReconnect **
+  const onForceViewersReconnect = ({
+    streamTitle,
+    streamSubtitle,
+    isLoggedInOnly
+  }: {
+    streamTitle: string;
+    streamSubtitle: string;
+    isLoggedInOnly: boolean;
+  }) => {
+    console.log('HomePage: Evento force-viewers-reconnect recibido:', {
       streamTitle,
       streamSubtitle,
       isLoggedInOnly
-    }: {
-      streamTitle: string;
-      streamSubtitle: string;
-      isLoggedInOnly: boolean;
-    }) => {
-      console.log('HomePage: Evento force-viewers-reconnect recibido:', {
-        streamTitle,
-        streamSubtitle,
-        isLoggedInOnly
-      });
-      if (isUserInPrivateCall) {
-        console.log('HomePage: En llamada privada, ignorando force-viewers-reconnect.');
-        return;
-      }
+    });
+    if (isUserInPrivateCall) {
+      console.log('HomePage: En llamada privada, ignorando force-viewers-reconnect.');
+      return;
+    }
 
-      if (
-        peerConnectionForGeneralStreamRef.current &&
-        peerConnectionForGeneralStreamRef.current.signalingState !== 'closed'
-      ) {
-        console.log('HomePage: Cerrando PC existente debido a force-viewers-reconnect.');
-        peerConnectionForGeneralStreamRef.current.close();
-        peerConnectionForGeneralStreamRef.current = null;
-      }
-      setGeneralStreamReceived(null);
-      setIsLoadingGeneralStream(true);
-      setGeneralStreamTitle(streamTitle);
-      setGeneralStreamSubtitle(streamSubtitle);
-      setCurrentGeneralStreamIsLoggedInOnly(isLoggedInOnly);
-      setGeneralStreamWebRtcError(null);
+    if (
+      peerConnectionForGeneralStreamRef.current &&
+      peerConnectionForGeneralStreamRef.current.signalingState !== 'closed'
+    ) {
+      console.log('HomePage: Cerrando PC existente debido a force-viewers-reconnect.');
+      peerConnectionForGeneralStreamRef.current.close();
+      peerConnectionForGeneralStreamRef.current = null;
+    }
+    setGeneralStreamReceived(null);
+    setIsLoadingGeneralStream(true);
+    setGeneralStreamTitle(streamTitle);
+    setGeneralStreamSubtitle(streamSubtitle);
+    setCurrentGeneralStreamIsLoggedInOnly(isLoggedInOnly);
+    setGeneralStreamWebRtcError(null);
 
-      if (socket && socket.connected) {
-        console.log('HomePage: Re-registrando como viewer tras force-viewers-reconnect.');
-        socket.emit('register-general-viewer');
-      }
-    };
+    if (socket && socket.connected) {
+      console.log('HomePage: Re-registrando como viewer tras force-viewers-reconnect.');
+      socket.emit('register-general-viewer');
+    }
+  };
 
-    // ---------- Bind events ----------
-    socket.on('connect', onConnect);
-    socket.on('connect_error', onConnectError);
-    socket.on('disconnect', onDisconnect);
-
-    socket.on('general-broadcaster-ready', onGeneralBroadcasterReady);
-    socket.on('general-stream-ended', onGeneralStreamEnded);
-    socket.on('general-broadcaster-disconnected', onGeneralBroadcasterDisconnected);
-    socket.on('offer-from-general-broadcaster', onOfferFromGeneralBroadcaster);
-    socket.on('candidate-from-general-broadcaster', onCandidateFromGeneralBroadcaster);
-    socket.on('general-stream-access-denied', onGeneralStreamAccessDenied);
-
-    socket.on('private-call-invite-from-admin', onPrivateCallInviteFromAdmin);
-    socket.on('private-sdp-offer-received', onPrivateSdpOfferReceived);
-    socket.on('private-ice-candidate-received', onPrivateIceCandidateReceived);
-    socket.on('private-call-terminated-by-admin', onPrivateCallTerminatedByAdmin);
-
-    socket.on('force-viewers-reconnect', onForceViewersReconnect);
-
-    return () => {
-      socket.off('connect', onConnect);
-      socket.off('connect_error', onConnectError);
-      socket.off('disconnect', onDisconnect);
-
-      socket.off('general-broadcaster-ready', onGeneralBroadcasterReady);
-      socket.off('general-stream-ended', onGeneralStreamEnded);
-      socket.off('general-broadcaster-disconnected', onGeneralBroadcasterDisconnected);
-      socket.off('offer-from-general-broadcaster', onOfferFromGeneralBroadcaster);
-      socket.off('candidate-from-general-broadcaster', onCandidateFromGeneralBroadcaster);
-      socket.off('general-stream-access-denied', onGeneralStreamAccessDenied);
-
-      socket.off('private-call-invite-from-admin', onPrivateCallInviteFromAdmin);
-      socket.off('private-sdp-offer-received', onPrivateSdpOfferReceived);
-      socket.off('private-ice-candidate-received', onPrivateIceCandidateReceived);
-      socket.off('private-call-terminated-by-admin', onPrivateCallTerminatedByAdmin);
-
-      socket.off('force-viewers-reconnect', onForceViewersReconnect);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    socket,
-    siteSettings,
-    loggedInUserId,
-    isUserInPrivateCall,
-    privateCallAdminSocketId,
-    handleEndPrivateCall,
-    toast,
-    t,
-    isUserMicMuted,
-    isUserVideoOff,
-    currentGeneralStreamIsLoggedInOnly,
-    currentBroadcasterId
-  ]);
-
-  // -------- Handlers para toggles --------
+  // --- 8) Handlers for Toggles ---
   const toggleUserMicrophone = () => {
     if (userLocalStreamForCall) {
       const newState = !isUserMicMuted;
@@ -859,7 +883,7 @@ export default function HomePage() {
     }
   };
 
-  // -------- Manejo de asignar stream al elemento video general --------
+  // --- 9) Effect to Assign General Stream to <video> ---
   useEffect(() => {
     const videoEl = generalStreamVideoRef.current;
     if (!videoEl) return;
@@ -874,22 +898,22 @@ export default function HomePage() {
 
     if (canShowGeneralStream && generalStreamReceived) {
       console.log(
-        'HomePage (Effect generalStreamVideoRef): Condiciones cumplidas, generalStreamReceived presente.',
-        'Video srcObject actual:',
+        'HomePage (Effect generalStreamVideoRef): Conditions met, generalStreamReceived present.',
+        'Current srcObject:',
         videoEl.srcObject ? (videoEl.srcObject as MediaStream).id : 'null',
-        'Nuevo Stream ID:',
+        'New Stream ID:',
         generalStreamReceived.id
       );
       if (videoEl.srcObject !== generalStreamReceived) {
-        console.log('HomePage (Effect): Asignando nuevo generalStreamReceived al elemento video.');
+        console.log('HomePage (Effect): Assigning new generalStreamReceived to video element.');
         videoEl.srcObject = generalStreamReceived;
         videoEl.muted = isGeneralStreamMuted;
         videoEl.load();
 
         handleLoadedMetadataGlobal = () => {
-          console.log('HomePage (Effect): Evento loadedmetadata. Pistas video:', generalStreamReceived?.getVideoTracks());
+          console.log('HomePage (Effect): loadedmetadata event. Video tracks:', generalStreamReceived?.getVideoTracks());
           if (generalStreamReceived?.getVideoTracks().length === 0) {
-            console.warn('HomePage (Effect): Stream recibido sin pistas de video.');
+            console.warn('HomePage (Effect): Received stream has no video tracks.');
             setGeneralStreamWebRtcError('Stream has no video.');
             setIsLoadingGeneralStream(false);
             return;
@@ -897,11 +921,11 @@ export default function HomePage() {
           videoEl
             .play()
             .then(() => {
-              console.log('HomePage (Effect): play() exitoso.');
+              console.log('HomePage (Effect): play() succeeded.');
               setIsLoadingGeneralStream(false);
             })
             .catch((e) => {
-              console.error('HomePage (Effect): Error al reproducir general stream:', e);
+              console.error('HomePage (Effect): Error playing general stream:', e);
               if (e.name !== 'AbortError') {
                 setGeneralStreamWebRtcError(`${t('homepage.live.webrtcSetupError')}: Playback failed - ${e.message}`);
               }
@@ -910,7 +934,7 @@ export default function HomePage() {
         };
 
         handleErrorGlobal = (e: Event) => {
-          console.error('HomePage (Effect): Evento error en elemento video:', e);
+          console.error('HomePage (Effect): Video element error event:', e);
           if (e.target && (e.target as HTMLVideoElement).error) {
             setGeneralStreamWebRtcError(
               `${t('homepage.live.webrtcSetupError')}: Video Error Code ${(e.target as HTMLVideoElement).error?.code}`
@@ -924,10 +948,10 @@ export default function HomePage() {
         videoEl.addEventListener('loadedmetadata', handleLoadedMetadataGlobal);
         videoEl.addEventListener('error', handleErrorGlobal);
       } else if (videoEl.paused && videoEl.readyState >= 3 && !isLoadingGeneralStream) {
-        console.log('HomePage (Effect): Stream ya asignado pero pausado, intentando reproducir.');
+        console.log('HomePage (Effect): Stream already assigned but paused, attempting to play.');
         videoEl.play().catch((e) => {
           if (e.name !== 'AbortError' && e.name !== 'NotAllowedError') {
-            console.error('HomePage: Error re-reproduciendo general stream:', e);
+            console.error('HomePage: Error re-playing general stream:', e);
           }
         });
       } else if (!videoEl.paused && isLoadingGeneralStream) {
@@ -935,11 +959,11 @@ export default function HomePage() {
       }
     } else {
       if (videoEl.srcObject) {
-        console.log('HomePage (Effect): Limpiando srcObject de generalStreamVideoRef porque no se puede mostrar.');
+        console.log('HomePage (Effect): Clearing srcObject of generalStreamVideoRef because it cannot be shown.');
         videoEl.srcObject = null;
       }
       if (isLoadingGeneralStream && !isUserInPrivateCall) {
-        console.log('HomePage (Effect): Condiciones no cumplidas o stream no recibido, desactivando loader.');
+        console.log('HomePage (Effect): Conditions not met or stream not received, turning off loader.');
         setIsLoadingGeneralStream(false);
       }
     }
@@ -952,7 +976,6 @@ export default function HomePage() {
         videoEl.removeEventListener('error', handleErrorGlobal);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     generalStreamReceived,
     isGeneralStreamLive,
@@ -965,24 +988,24 @@ export default function HomePage() {
     t
   ]);
 
-  // -------- Private Call: asignar adminStreamForCall al video principal --------
+  // --- 10) Private Call: Assign Admin Stream to Main Video ---
   useEffect(() => {
     const videoEl = privateCallMainVideoRef.current;
     if (videoEl) {
       if (adminStreamForCall && isUserInPrivateCall) {
         if (videoEl.srcObject !== adminStreamForCall) {
-          console.log('HomePage (PrivateCallMainVideo Effect): Asignando adminStreamForCall al elemento.');
+          console.log('HomePage (PrivateCallMainVideo Effect): Assigning adminStreamForCall to element.');
           setIsLoadingPrivateCallVideo(true);
           videoEl.srcObject = adminStreamForCall;
           videoEl.muted = false;
           videoEl.load();
 
           const handleLoadedMetadata = () => {
-            console.log('HomePage (PrivateCallMainVideo Effect): Evento loadedmetadata.');
+            console.log('HomePage (PrivateCallMainVideo Effect): loadedmetadata event.');
             videoEl
               .play()
               .catch((e) => {
-                if (e.name !== 'AbortError') console.error('HomePage: Error al reproducir video admin:', e);
+                if (e.name !== 'AbortError') console.error('HomePage: Error playing admin video:', e);
               })
               .finally(() => setIsLoadingPrivateCallVideo(false));
           };
@@ -990,32 +1013,32 @@ export default function HomePage() {
           return () => videoEl.removeEventListener('loadedmetadata', handleLoadedMetadata);
         }
       } else if (videoEl.srcObject) {
-        console.log('HomePage (PrivateCallMainVideo Effect): Limpiando srcObject del elemento privado.');
+        console.log('HomePage (PrivateCallMainVideo Effect): Clearing srcObject of private element.');
         videoEl.srcObject = null;
         setIsLoadingPrivateCallVideo(false);
       }
     }
   }, [adminStreamForCall, isUserInPrivateCall]);
 
-  // -------- Private Call: asignar userLocalStreamForCall al PiP --------
+  // --- 11) Private Call: Assign User Local Stream to PiP ---
   useEffect(() => {
     const videoEl = privateCallUserPipVideoRef.current;
     if (videoEl) {
       if (userLocalStreamForCall && isUserInPrivateCall) {
         if (videoEl.srcObject !== userLocalStreamForCall) {
-          console.log('HomePage (User PiP Effect): Asignando userLocalStreamForCall al elemento PiP.');
+          console.log('HomePage (User PiP Effect): Assigning userLocalStreamForCall to PiP element.');
           videoEl.srcObject = userLocalStreamForCall;
           videoEl.muted = true;
           videoEl.load();
           videoEl.onloadedmetadata = () => {
             videoEl.play().catch((e) => {
-              if (e.name !== 'AbortError') console.error('HomePage: Error al reproducir PiP:', e);
+              if (e.name !== 'AbortError') console.error('HomePage: Error playing PiP:', e);
             });
           };
         }
         videoEl.style.visibility = isUserVideoOff ? 'hidden' : 'visible';
       } else if (videoEl.srcObject) {
-        console.log('HomePage (User PiP Effect): Limpiando srcObject del PiP.');
+        console.log('HomePage (User PiP Effect): Clearing srcObject of PiP.');
         videoEl.srcObject = null;
       }
     }
@@ -1233,9 +1256,7 @@ export default function HomePage() {
                 ))}
               </div>
             ) : (
-              <p className="text-center text-muted-foreground">
-                {t('homepage.courses.noCourses')}
-              </p>
+              <p className="text-center text-muted-foreground">{t('homepage.courses.noCourses')}</p>
             )}
           </div>
         </section>

@@ -15,6 +15,7 @@ interface NextApiResponseWithSocket extends NextApiResponse {
 }
 
 let generalBroadcasterSocketId: string | null = null;
+let generalBroadcasterAppUserId: string | null = null; // Guarda el appUserId del broadcaster
 let currentGeneralStreamTitle: string | null = null;
 let currentGeneralStreamSubtitle: string | null = null;
 let currentGeneralStreamIsLoggedInOnly: boolean = false;
@@ -82,12 +83,31 @@ export default async function SocketHandler(
         const appUserId = socket.handshake.query.appUserId as string | undefined;
         socket.data.appUserId = appUserId;
         console.log(
-          `Socket.IO: Cliente conectado → SocketID: ${socket.id}, AppUserID: ${
-            appUserId || 'Anonymous'
-          }`
+          `Socket.IO: Cliente conectado → SocketID: ${socket.id}, AppUserID: ${appUserId || 'Anonymous'}`
         );
 
-        // 1) Si hay llamadas privadas pendentes, reenviar la invitación
+        // 1) Si un admin que ya estaba broadcasting se reconecta con el mismo appUserId,
+        // reasignamos su socket como broadcaster y reenviamos estado a todos.
+        if (
+          appUserId &&
+          generalBroadcasterAppUserId &&
+          appUserId === generalBroadcasterAppUserId
+        ) {
+          console.log(
+            `Socket.IO: Admin reconectado detected (AppUserID: ${appUserId}). Reasignando broadcaster.`
+          );
+          generalBroadcasterSocketId = socket.id;
+          socket.data.isGeneralBroadcaster = true;
+          // Notificar a todos que el broadcaster sigue activo
+          io.emit('general-broadcaster-ready', {
+            broadcasterId: generalBroadcasterSocketId,
+            streamTitle: currentGeneralStreamTitle,
+            streamSubtitle: currentGeneralStreamSubtitle,
+            isLoggedInOnly: currentGeneralStreamIsLoggedInOnly,
+          });
+        }
+
+        // 2) Si hay llamadas privadas pendentes, reenviar la invitación
         if (appUserId && pendingPrivateCalls.has(appUserId)) {
           const callInfo = pendingPrivateCalls.get(appUserId)!;
           pendingPrivateCalls.delete(appUserId);
@@ -102,7 +122,7 @@ export default async function SocketHandler(
           }
         }
 
-        // 2) Notificar al admin si este usuario es el autorizado para private call
+        // 3) Notificar al admin si este usuario es el autorizado para private call
         let currentSettings = await getCachedSiteSettings();
         if (!currentSettings) currentSettings = await getRefreshedSiteSettings();
         if (
@@ -124,7 +144,7 @@ export default async function SocketHandler(
           }
         }
 
-        // 3) Emitir estado inicial de broadcasting al viewer recién conectado
+        // 4) Emitir estado inicial de broadcasting al viewer recién conectado
         if (generalBroadcasterSocketId) {
           socket.emit('general-broadcaster-ready', {
             broadcasterId: generalBroadcasterSocketId,
@@ -142,7 +162,7 @@ export default async function SocketHandler(
         );
       }
 
-      // 4) Manejador para que el cliente pregunte si hay un broadcast activo
+      // 5) Manejador para que el cliente pregunte si hay un broadcast activo
       socket.on('check-active-broadcast', () => {
         if (generalBroadcasterSocketId) {
           socket.emit('active-broadcast-info', {
@@ -156,7 +176,7 @@ export default async function SocketHandler(
         }
       });
 
-      // 5) Registro de admin solicitando el estado del usuario autorizado
+      // 6) Registro de admin solicitando el estado del usuario autorizado
       socket.on(
         'request-authorized-user-status',
         async ({ targetUserAppId }: { targetUserAppId: string }) => {
@@ -183,12 +203,11 @@ export default async function SocketHandler(
         }
       );
 
-      // 6) Un viewer se registra para el broadcast
+      // 7) Un viewer se registra para el broadcast
       socket.on('register-general-viewer', async () => {
         try {
           console.log(
-            `Socket.IO: Client ${socket.id} (AppUser: ${socket.data.appUserId ||
-              'Anon'}) quiere registrarse como viewer.`
+            `Socket.IO: Client ${socket.id} (AppUser: ${socket.data.appUserId || 'Anon'}) quiere registrarse como viewer.`
           );
           const settings = await getCachedSiteSettings();
           if (!settings) return;
@@ -237,7 +256,7 @@ export default async function SocketHandler(
         }
       });
 
-      // 7) El broadcaster (admin) se registra para iniciar un broadcast
+      // 8) El broadcaster (admin) se registra para iniciar un broadcast
       socket.on(
         'register-general-broadcaster',
         async (data?: {
@@ -285,6 +304,7 @@ export default async function SocketHandler(
 
             // Guardar el estado del broadcast
             generalBroadcasterSocketId = socket.id;
+            generalBroadcasterAppUserId = socket.data.appUserId || null;
             currentGeneralStreamTitle =
               data?.streamTitle || settings.liveStreamDefaultTitle || 'Live Stream';
             currentGeneralStreamSubtitle = data?.streamSubtitle || '';
@@ -317,7 +337,7 @@ export default async function SocketHandler(
         }
       );
 
-      // 8) El broadcaster envía un offer SDP a un viewer específico
+      // 9) El broadcaster envía un offer SDP a un viewer específico
       socket.on(
         'general-stream-offer-to-viewer',
         async ({
@@ -356,7 +376,7 @@ export default async function SocketHandler(
         }
       );
 
-      // 9) El viewer responde con su SDP answer al broadcaster
+      // 10) El viewer responde con su SDP answer al broadcaster
       socket.on(
         'general-stream-answer-to-broadcaster',
         ({
@@ -386,7 +406,7 @@ export default async function SocketHandler(
         }
       );
 
-      // 10) El broadcaster envía ICE candidate al viewer
+      // 11) El broadcaster envía ICE candidate al viewer
       socket.on(
         'general-stream-candidate-to-viewer',
         ({
@@ -418,7 +438,7 @@ export default async function SocketHandler(
         }
       );
 
-      // 11) El viewer envía ICE candidate al broadcaster
+      // 12) El viewer envía ICE candidate al broadcaster
       socket.on(
         'general-stream-candidate-to-broadcaster',
         ({
@@ -448,7 +468,7 @@ export default async function SocketHandler(
         }
       );
 
-      // 12) El administrador detiene manualmente el stream
+      // 13) El administrador detiene manualmente el stream
       socket.on('stop-general-stream', () => {
         try {
           if (socket.id === generalBroadcasterSocketId) {
@@ -456,6 +476,7 @@ export default async function SocketHandler(
               `Socket.IO: Admin ${socket.id} detuvo el general stream manualmente.`
             );
             generalBroadcasterSocketId = null;
+            generalBroadcasterAppUserId = null;
             currentGeneralStreamTitle = null;
             currentGeneralStreamSubtitle = null;
             currentGeneralStreamIsLoggedInOnly = false;
@@ -470,7 +491,7 @@ export default async function SocketHandler(
         }
       });
 
-      // 13) Forzar a todos los viewers a reconectarse (por ejemplo, admin cambió título o reinició ICE)
+      // 14) Forzar a todos los viewers a reconectarse (por ejemplo, admin cambió título o reinició ICE)
       socket.on(
         'force-viewers-reconnect',
         ({
@@ -486,10 +507,14 @@ export default async function SocketHandler(
             console.log(
               `Socket.IO: Broadcasting 'force-viewers-reconnect' con nuevos datos del stream.`
             );
+            // Limpiar todos los viewers actuales para forzar re-registro
+            generalStreamViewers.clear();
+
             // actualizar estado en servidor
             currentGeneralStreamTitle = streamTitle;
             currentGeneralStreamSubtitle = streamSubtitle;
             currentGeneralStreamIsLoggedInOnly = isLoggedInOnly;
+
             // notificar a todos
             socket.broadcast.emit('force-viewers-reconnect', {
               broadcasterId: generalBroadcasterSocketId,
@@ -506,7 +531,7 @@ export default async function SocketHandler(
         }
       );
 
-      // 14) Cliente se desconecta
+      // 15) Cliente se desconecta
       socket.on('disconnect', async (reason) => {
         try {
           console.log(
@@ -536,6 +561,7 @@ export default async function SocketHandler(
               `Socket.IO: Broadcaster general ${socket.id} desconectado. Terminando stream.`
             );
             generalBroadcasterSocketId = null;
+            generalBroadcasterAppUserId = null;
             currentGeneralStreamTitle = null;
             currentGeneralStreamSubtitle = null;
             currentGeneralStreamIsLoggedInOnly = false;
@@ -618,7 +644,8 @@ export default async function SocketHandler(
         }
       });
 
-      // ----------- LÓGICA DE LLAMADAS PRIVADAS (sin cambios) -----------
+      // ----------- LÓGICA DE LLAMADAS PRIVADAS -----------
+
       socket.on(
         'admin-initiate-private-call-request',
         async ({ targetUserAppId }: { targetUserAppId: string }) => {
@@ -841,9 +868,7 @@ export default async function SocketHandler(
               adminForPrivateCall &&
               socket.id === adminForPrivateCall.socketId
             ) {
-              console.log(
-                `Socket.IO: Admin ${socket.id} finalizando private call.`
-              );
+              console.log(`Socket.IO: Admin ${socket.id} finalizando private call.`);
               const targetUserSocketId = userInPrivateCall
                 ? userInPrivateCall.socketId
                 : userSocketId;
@@ -910,9 +935,7 @@ export default async function SocketHandler(
               userInPrivateCall &&
               socket.id === userInPrivateCall.socketId
             ) {
-              console.log(
-                `Socket.IO: User ${socket.id} terminó private call.`
-              );
+              console.log(`Socket.IO: User ${socket.id} terminó private call.`);
               const targetAdminSocketId = adminForPrivateCall
                 ? adminForPrivateCall.socketId
                 : adminSocketId;
