@@ -42,7 +42,41 @@ import { useTranslation } from '@/context/I18nContext';
 import type { SiteSettings, UserProfile, SessionUserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-const PC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const PC_CONFIG = {
+  iceServers: [
+    // 1) STUN público de Google
+    { urls: "stun:stun.l.google.com:19302" },
+
+    // 2) STUN alternativo de Metered
+    { urls: "stun:stun.relay.metered.ca:80" },
+
+    // 3) TURN de Metered (UDP sobre puerto 80)
+    {
+      urls: "turn:global.relay.metered.ca:80",
+      username: "adec321c101830c29b8d5f53",
+      credential: "onjnB9t/tAaZs6km",
+    },
+
+    // 4) TURN de Metered (TCP sobre puerto 80)
+    {
+      urls: "turn:global.relay.metered.ca:80?transport=tcp",
+      username: "adec321c101830c29b8d5f53",
+      credential: "onjnB9t/tAaZs6km",
+    },
+
+    // 5) TURN de Metered (UDP/TCP sobre puerto 443)
+    {
+      urls: "turn:global.relay.metered.ca:443",
+      username: "adec321c101830c29b8d5f53",
+      credential: "onjnB9t/tAaZs6km",
+    },
+    {
+      urls: "turns:global.relay.metered.ca:443?transport=tcp",
+      username: "adec321c101830c29b8d5f53",
+      credential: "onjnB9t/tAaZs6km",
+    },
+  ],
+};
 
 export default function LiveStreamAdminPage() {
   const { t, siteSettings, refreshSiteSettings, isLoadingSettings } = useTranslation();
