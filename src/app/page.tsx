@@ -6,6 +6,7 @@ import VideoCard from '@/components/VideoCard';
 import VideoPlayerModal from '@/components/VideoPlayerModal';
 import AnnouncementModal from '@/components/AnnouncementModal';
 import CourseDetailModal from '@/components/CourseDetailModal';
+import CuratedTestimonialsDisplay from '@/components/CuratedTestimonialsDisplay';
 import { Button } from '@/components/ui/button';
 import {
   PlayCircle,
