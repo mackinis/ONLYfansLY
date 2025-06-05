@@ -1,3 +1,4 @@
+
 // src/pages/api/socket_io.ts
 import type { Server as HTTPServer } from 'http';
 import type { Socket as NetSocket } from 'net';
@@ -35,7 +36,7 @@ const pendingPrivateCalls = new Map<
 
 let siteSettingsCache: SiteSettings | null = null;
 let siteSettingsCacheTime: number = 0;
-const SITE_SETTINGS_CACHE_DURATION = 3 * 1000;
+const SITE_SETTINGS_CACHE_DURATION = 3 * 1000; // 3 seconds
 
 async function getRefreshedSiteSettings(): Promise<SiteSettings | null> {
   try {
@@ -43,7 +44,10 @@ async function getRefreshedSiteSettings(): Promise<SiteSettings | null> {
     siteSettingsCacheTime = Date.now();
     console.log('Socket.IO: Site settings cache refreshed.');
   } catch (error) {
-    console.error('Socket.IO: Error al refrescar site settings:', error);
+    console.error('Socket.IO: Error refreshing site settings:', error);
+    // In case of error, invalidate cache so next attempt tries to refresh
+    siteSettingsCache = null;
+    siteSettingsCacheTime = 0;
   }
   return siteSettingsCache;
 }
@@ -51,15 +55,16 @@ async function getRefreshedSiteSettings(): Promise<SiteSettings | null> {
 async function getCachedSiteSettings(): Promise<SiteSettings | null> {
   const now = Date.now();
   if (!siteSettingsCache || now - siteSettingsCacheTime > SITE_SETTINGS_CACHE_DURATION) {
-    console.log('Socket.IO: Cache miss or expired, refreshing site settings.');
-    return getRefreshedSiteSettings();
+    console.log('Socket.IO: Cache miss or expired, attempting to refresh site settings.');
+    return await getRefreshedSiteSettings();
   }
   console.log('Socket.IO: Using cached site settings.');
   return siteSettingsCache;
 }
 
-// Inicializamos cache inmediatamente al arrancar el servidor:
-getRefreshedSiteSettings();
+// Initialize cache immediately at server startup
+getRefreshedSiteSettings().catch(err => console.error("Socket.IO: Initial site settings fetch failed on startup:", err));
+
 
 export const config = { api: { bodyParser: false } };
 
@@ -78,16 +83,24 @@ export default async function SocketHandler(
     });
 
     io.on('connection', async (socket: ServerSocket) => {
+      // Top-level try-catch for the entire connection handler
       try {
         const appUserId = socket.handshake.query.appUserId as string | undefined;
         socket.data.appUserId = appUserId;
         console.log(
-          `Socket.IO: Cliente conectado → SocketID: ${socket.id}, AppUserID: ${
+          `Socket.IO: Client connected → SocketID: ${socket.id}, AppUserID: ${
             appUserId || 'Anonymous'
           }`
         );
 
-        // 1) Si hay llamadas privadas pendentes, reenviar la invitación
+        let currentSettings = await getCachedSiteSettings();
+        if (!currentSettings) {
+           console.warn('Socket.IO: Site settings not available on new connection for socket:', socket.id);
+           // Optionally, you could emit an error to the client or disconnect them
+           // For now, proceeding but some features might not work as expected
+        }
+
+
         if (appUserId && pendingPrivateCalls.has(appUserId)) {
           const callInfo = pendingPrivateCalls.get(appUserId)!;
           pendingPrivateCalls.delete(appUserId);
@@ -102,9 +115,6 @@ export default async function SocketHandler(
           }
         }
 
-        // 2) Notificar al admin si este usuario es el autorizado para private call
-        let currentSettings = await getCachedSiteSettings();
-        if (!currentSettings) currentSettings = await getRefreshedSiteSettings();
         if (
           appUserId &&
           currentSettings?.liveStreamAuthorizedUserId === appUserId
@@ -124,45 +134,49 @@ export default async function SocketHandler(
           }
         }
 
-        // 3) Emitir estado inicial de broadcasting al viewer recién conectado
         if (generalBroadcasterSocketId) {
-          socket.emit('general-broadcaster-ready', {
+          if (socket.connected) socket.emit('general-broadcaster-ready', {
             broadcasterId: generalBroadcasterSocketId,
             streamTitle: currentGeneralStreamTitle,
             streamSubtitle: currentGeneralStreamSubtitle,
             isLoggedInOnly: currentGeneralStreamIsLoggedInOnly,
           });
         } else {
-          socket.emit('general-broadcaster-disconnected');
+          if (socket.connected) socket.emit('general-broadcaster-disconnected');
         }
       } catch (connectionError) {
         console.error(
-          `Socket.IO: Error durante la conexión inicial de ${socket.id}:`,
+          `Socket.IO: Error during the initial connection setup for socket ${socket.id}:`,
           connectionError
         );
+        if (socket.connected) socket.emit('server_error', { message: 'Error during connection setup.' });
       }
 
-      // 4) Manejador para que el cliente pregunte si hay un broadcast activo
-      socket.on('check-active-broadcast', () => {
-        if (generalBroadcasterSocketId) {
-          socket.emit('active-broadcast-info', {
-            broadcasterId: generalBroadcasterSocketId,
-            streamTitle: currentGeneralStreamTitle,
-            streamSubtitle: currentGeneralStreamSubtitle,
-            isLoggedInOnly: currentGeneralStreamIsLoggedInOnly,
-          });
-        } else {
-          socket.emit('no-active-broadcast');
+
+      socket.on('check-active-broadcast', async () => {
+        try {
+            if (generalBroadcasterSocketId) {
+              if (socket.connected) socket.emit('active-broadcast-info', {
+                broadcasterId: generalBroadcasterSocketId,
+                streamTitle: currentGeneralStreamTitle,
+                streamSubtitle: currentGeneralStreamSubtitle,
+                isLoggedInOnly: currentGeneralStreamIsLoggedInOnly,
+              });
+            } else {
+              if (socket.connected) socket.emit('no-active-broadcast');
+            }
+        } catch (error) {
+            console.error(`Socket.IO: Error in 'check-active-broadcast' for socket ${socket.id}:`, error);
+            if (socket.connected) socket.emit('server_error', { message: 'Error processing check-active-broadcast.' });
         }
       });
 
-      // 5) Registro de admin solicitando el estado del usuario autorizado
       socket.on(
         'request-authorized-user-status',
         async ({ targetUserAppId }: { targetUserAppId: string }) => {
           try {
             console.log(
-              `Socket.IO: Admin ${socket.id} requesting status para targetUserAppId ${targetUserAppId}`
+              `Socket.IO: Admin ${socket.id} requesting status for targetUserAppId ${targetUserAppId}`
             );
             const targetUserSocket = Array.from(io.sockets.sockets.values()).find(
               (s) => s.data.appUserId === targetUserAppId
@@ -176,37 +190,37 @@ export default async function SocketHandler(
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'request-authorized-user-status' para socket ${socket.id}:`,
+              `Socket.IO: Error in 'request-authorized-user-status' for socket ${socket.id}:`,
               error
             );
+            if (socket.connected) socket.emit('server_error', { message: 'Error processing request-authorized-user-status.' });
           }
         }
       );
 
-      // 6) Un viewer se registra para el broadcast
       socket.on('register-general-viewer', async () => {
         try {
           console.log(
             `Socket.IO: Client ${socket.id} (AppUser: ${socket.data.appUserId ||
-              'Anon'}) quiere registrarse como viewer.`
+              'Anon'}) wants to register as viewer.`
           );
           const settings = await getCachedSiteSettings();
-          if (!settings) return;
+          if (!settings) {
+            console.warn('Socket.IO: Site settings not available for register-general-viewer, socket:', socket.id);
+            if (socket.connected) socket.emit('general-broadcaster-disconnected'); // Indicate no stream
+            return;
+          }
 
-          // Si hay un broadcaster activo
           if (generalBroadcasterSocketId) {
             if (currentGeneralStreamIsLoggedInOnly && !socket.data.appUserId) {
-              // Viewer anónimo no autorizado
               if (socket.connected)
                 socket.emit('general-stream-access-denied', {
                   message: 'This live stream is for registered users only.',
                 });
               return;
             }
-            // Solo agregamos si no estaba previamente en el Map
             if (!generalStreamViewers.has(socket.id)) {
               generalStreamViewers.set(socket.id, socket);
-              // Notificar al broadcaster que hay un nuevo viewer
               const broadcasterSocket = io.sockets.sockets.get(
                 generalBroadcasterSocketId
               );
@@ -216,7 +230,6 @@ export default async function SocketHandler(
                 });
               }
             }
-            // Notificar directamente al viewer con detalles del broadcast
             if (socket.connected) {
               socket.emit('general-broadcaster-ready', {
                 broadcasterId: generalBroadcasterSocketId,
@@ -226,18 +239,17 @@ export default async function SocketHandler(
               });
             }
           } else {
-            // No hay broadcaster → avisar viewer
             if (socket.connected) socket.emit('general-broadcaster-disconnected');
           }
         } catch (error) {
           console.error(
-            `Socket.IO: Error en 'register-general-viewer' para ${socket.id}:`,
+            `Socket.IO: Error in 'register-general-viewer' for ${socket.id}:`,
             error
           );
+          if (socket.connected) socket.emit('server_error', { message: 'Error processing register-general-viewer.' });
         }
       });
 
-      // 7) El broadcaster (admin) se registra para iniciar un broadcast
       socket.on(
         'register-general-broadcaster',
         async (data?: {
@@ -247,18 +259,18 @@ export default async function SocketHandler(
         }) => {
           try {
             console.log(
-              `Socket.IO: Admin ${socket.id} intenta registrarse como general broadcaster con data:`,
+              `Socket.IO: Admin ${socket.id} attempts to register as general broadcaster with data:`,
               data
             );
-            const settings = await getCachedSiteSettings();
+            let settings = await getCachedSiteSettings();
             if (!settings) {
+              console.warn('Socket.IO: Site settings not available for register-general-broadcaster, admin socket:', socket.id);
               if (socket.connected)
                 socket.emit('general-stream-error', {
-                  message: 'Server error: Site settings not available.',
+                  message: 'Server error: Site settings could not be loaded.',
                 });
               return;
             }
-            // Si el admin está en llamada privada, no permitir
             if (
               (adminForPrivateCall &&
                 adminForPrivateCall.socketId === socket.id &&
@@ -267,11 +279,10 @@ export default async function SocketHandler(
             ) {
               if (socket.connected)
                 socket.emit('general-stream-error', {
-                  message: 'Cannot start general stream due to private call session.',
+                  message: 'Cannot start general stream due to an active or pending private call session.',
                 });
               return;
             }
-            // Si ya hay otro broadcaster distinto, no permitir
             if (
               generalBroadcasterSocketId &&
               generalBroadcasterSocketId !== socket.id
@@ -283,7 +294,6 @@ export default async function SocketHandler(
               return;
             }
 
-            // Guardar el estado del broadcast
             generalBroadcasterSocketId = socket.id;
             currentGeneralStreamTitle =
               data?.streamTitle || settings.liveStreamDefaultTitle || 'Live Stream';
@@ -294,10 +304,9 @@ export default async function SocketHandler(
             socket.data.isGeneralBroadcaster = true;
 
             console.log(
-              `Socket.IO: Admin ${socket.id} se registró como general broadcaster. Title: ${currentGeneralStreamTitle}, Subtitle: ${currentGeneralStreamSubtitle}, LoggedInOnly: ${currentGeneralStreamIsLoggedInOnly}`
+              `Socket.IO: Admin ${socket.id} registered as general broadcaster. Title: ${currentGeneralStreamTitle}, Subtitle: ${currentGeneralStreamSubtitle}, LoggedInOnly: ${currentGeneralStreamIsLoggedInOnly}`
             );
 
-            // Notificar a todos (viejos y nuevos) que el broadcaster está listo
             io.emit('general-broadcaster-ready', {
               broadcasterId: generalBroadcasterSocketId,
               streamTitle: currentGeneralStreamTitle,
@@ -306,18 +315,40 @@ export default async function SocketHandler(
             });
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'register-general-broadcaster' para ${socket.id}:`,
+              `Socket.IO: Error in 'register-general-broadcaster' for ${socket.id}:`,
               error
             );
             if (socket.connected)
               socket.emit('general-stream-error', {
-                message: 'Server error while registering broadcaster.',
+                message: 'Server error occurred while registering as broadcaster.',
               });
           }
         }
       );
 
-      // 8) El broadcaster envía un offer SDP a un viewer específico
+      socket.on('admin-signals-new-general-stream', async (data: { streamTitle: string, streamSubtitle: string, isLoggedInOnly: boolean }) => {
+        try {
+            if (socket.id === generalBroadcasterSocketId) { // Ensure only the current broadcaster can do this
+                console.log(`Socket.IO: Admin ${socket.id} signals new general stream. Broadcasting 'force-viewers-reconnect'. Data:`, data);
+                currentGeneralStreamTitle = data.streamTitle;
+                currentGeneralStreamSubtitle = data.streamSubtitle;
+                currentGeneralStreamIsLoggedInOnly = data.isLoggedInOnly;
+
+                // Notify all OTHER clients to reconnect/refresh for the new stream details
+                socket.broadcast.emit('force-viewers-reconnect', {
+                    broadcasterId: generalBroadcasterSocketId,
+                    streamTitle: currentGeneralStreamTitle,
+                    streamSubtitle: currentGeneralStreamSubtitle,
+                    isLoggedInOnly: currentGeneralStreamIsLoggedInOnly,
+                });
+            } else {
+                console.warn(`Socket.IO: Unauthorized attempt to signal new general stream by ${socket.id}`);
+            }
+        } catch (error) {
+            console.error(`Socket.IO: Error in 'admin-signals-new-general-stream' for ${socket.id}:`, error);
+        }
+      });
+
       socket.on(
         'general-stream-offer-to-viewer',
         async ({
@@ -329,7 +360,7 @@ export default async function SocketHandler(
         }) => {
           try {
             console.log(
-              `Socket.IO: Broadcaster ${socket.id} enviando offer a viewer ${viewerId}`
+              `Socket.IO: Broadcaster ${socket.id} sending offer to viewer ${viewerId}`
             );
             const viewerSocket = generalStreamViewers.get(viewerId);
             if (
@@ -343,20 +374,19 @@ export default async function SocketHandler(
               });
             } else {
               console.log(
-                `Socket.IO: Viewer ${viewerId} no es elegible o está desconectado para offer.`
+                `Socket.IO: Viewer ${viewerId} not eligible or disconnected for offer. Removing from viewers map.`
               );
               generalStreamViewers.delete(viewerId);
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'general-stream-offer-to-viewer' para ${socket.id}:`,
+              `Socket.IO: Error in 'general-stream-offer-to-viewer' for ${socket.id}:`,
               error
             );
           }
         }
       );
 
-      // 9) El viewer responde con su SDP answer al broadcaster
       socket.on(
         'general-stream-answer-to-broadcaster',
         ({
@@ -368,7 +398,7 @@ export default async function SocketHandler(
         }) => {
           try {
             console.log(
-              `Socket.IO: Viewer ${socket.id} enviando answer a broadcaster ${broadcasterId}`
+              `Socket.IO: Viewer ${socket.id} sending answer to broadcaster ${broadcasterId}`
             );
             const broadcasterSocket = io.sockets.sockets.get(broadcasterId);
             if (broadcasterSocket && broadcasterSocket.connected) {
@@ -379,14 +409,13 @@ export default async function SocketHandler(
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'general-stream-answer-to-broadcaster' para ${socket.id}:`,
+              `Socket.IO: Error in 'general-stream-answer-to-broadcaster' for ${socket.id}:`,
               error
             );
           }
         }
       );
 
-      // 10) El broadcaster envía ICE candidate al viewer
       socket.on(
         'general-stream-candidate-to-viewer',
         ({
@@ -398,7 +427,7 @@ export default async function SocketHandler(
         }) => {
           try {
             console.log(
-              `Socket.IO: Broadcaster ${socket.id} enviando ICE candidate a viewer ${viewerId}`
+              `Socket.IO: Broadcaster ${socket.id} sending ICE candidate to viewer ${viewerId}`
             );
             const viewerSocket = generalStreamViewers.get(viewerId);
             if (viewerSocket && viewerSocket.connected) {
@@ -407,18 +436,17 @@ export default async function SocketHandler(
                 candidate,
               });
             } else {
-              generalStreamViewers.delete(viewerId);
+                generalStreamViewers.delete(viewerId);
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'general-stream-candidate-to-viewer' para ${socket.id}:`,
+              `Socket.IO: Error in 'general-stream-candidate-to-viewer' for ${socket.id}:`,
               error
             );
           }
         }
       );
 
-      // 11) El viewer envía ICE candidate al broadcaster
       socket.on(
         'general-stream-candidate-to-broadcaster',
         ({
@@ -430,7 +458,7 @@ export default async function SocketHandler(
         }) => {
           try {
             console.log(
-              `Socket.IO: Viewer ${socket.id} enviando ICE candidate a broadcaster ${broadcasterId}`
+              `Socket.IO: Viewer ${socket.id} sending ICE candidate to broadcaster ${broadcasterId}`
             );
             const broadcasterSocket = io.sockets.sockets.get(broadcasterId);
             if (broadcasterSocket && broadcasterSocket.connected) {
@@ -441,81 +469,47 @@ export default async function SocketHandler(
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'general-stream-candidate-to-broadcaster' para ${socket.id}:`,
+              `Socket.IO: Error in 'general-stream-candidate-to-broadcaster' for ${socket.id}:`,
               error
             );
           }
         }
       );
 
-      // 12) El administrador detiene manualmente el stream
       socket.on('stop-general-stream', () => {
         try {
           if (socket.id === generalBroadcasterSocketId) {
             console.log(
-              `Socket.IO: Admin ${socket.id} detuvo el general stream manualmente.`
+              `Socket.IO: Admin ${socket.id} stopped the general stream manually.`
             );
             generalBroadcasterSocketId = null;
             currentGeneralStreamTitle = null;
             currentGeneralStreamSubtitle = null;
             currentGeneralStreamIsLoggedInOnly = false;
+            generalStreamViewers.forEach(viewerSocket => {
+                if (viewerSocket && viewerSocket.connected) {
+                    viewerSocket.emit('general-broadcaster-disconnected');
+                }
+            });
             generalStreamViewers.clear();
-            io.emit('general-broadcaster-disconnected');
+            io.emit('general-broadcaster-disconnected'); // Ensure all clients know
           }
         } catch (error) {
           console.error(
-            `Socket.IO: Error en 'stop-general-stream' para ${socket.id}:`,
+            `Socket.IO: Error in 'stop-general-stream' for ${socket.id}:`,
             error
           );
         }
       });
 
-      // 13) Forzar a todos los viewers a reconectarse (por ejemplo, admin cambió título o reinició ICE)
-      socket.on(
-        'force-viewers-reconnect',
-        ({
-          streamTitle,
-          streamSubtitle,
-          isLoggedInOnly,
-        }: {
-          streamTitle: string;
-          streamSubtitle: string;
-          isLoggedInOnly: boolean;
-        }) => {
-          try {
-            console.log(
-              `Socket.IO: Broadcasting 'force-viewers-reconnect' con nuevos datos del stream.`
-            );
-            // actualizar estado en servidor
-            currentGeneralStreamTitle = streamTitle;
-            currentGeneralStreamSubtitle = streamSubtitle;
-            currentGeneralStreamIsLoggedInOnly = isLoggedInOnly;
-            // notificar a todos
-            socket.broadcast.emit('force-viewers-reconnect', {
-              broadcasterId: generalBroadcasterSocketId,
-              streamTitle,
-              streamSubtitle,
-              isLoggedInOnly,
-            });
-          } catch (error) {
-            console.error(
-              `Socket.IO: Error en 'force-viewers-reconnect' para ${socket.id}:`,
-              error
-            );
-          }
-        }
-      );
-
-      // 14) Cliente se desconecta
       socket.on('disconnect', async (reason) => {
         try {
           console.log(
-            `Socket.IO: Cliente desconectado → SocketID: ${socket.id}, AppUserID: ${
+            `Socket.IO: Client disconnected → SocketID: ${socket.id}, AppUserID: ${
               socket.data.appUserId || 'Anonymous'
             }, Reason: ${reason}`
           );
 
-          // Si el socket era viewer, removerlo del Map y notificar al broadcaster
           if (generalStreamViewers.has(socket.id)) {
             generalStreamViewers.delete(socket.id);
             if (generalBroadcasterSocketId) {
@@ -530,26 +524,29 @@ export default async function SocketHandler(
             }
           }
 
-          // Si el socket era el broadcaster, terminar el stream por completo
           if (socket.id === generalBroadcasterSocketId) {
             console.log(
-              `Socket.IO: Broadcaster general ${socket.id} desconectado. Terminando stream.`
+              `Socket.IO: General broadcaster ${socket.id} disconnected. Ending stream.`
             );
             generalBroadcasterSocketId = null;
             currentGeneralStreamTitle = null;
             currentGeneralStreamSubtitle = null;
             currentGeneralStreamIsLoggedInOnly = false;
+            generalStreamViewers.forEach(viewerSocket => {
+                if (viewerSocket && viewerSocket.connected) {
+                    viewerSocket.emit('general-broadcaster-disconnected');
+                }
+            });
             generalStreamViewers.clear();
             io.emit('general-broadcaster-disconnected');
           }
 
-          // Manejo de desconexión en llamadas privadas
           if (
             adminForPrivateCall &&
             socket.id === adminForPrivateCall.socketId
           ) {
             console.log(
-              `Socket.IO: Admin ${socket.id} de llamada privada desconectado.`
+              `Socket.IO: Admin ${socket.id} for private call disconnected.`
             );
             if (userInPrivateCall) {
               const userSocketInstance = io.sockets.sockets.get(
@@ -571,7 +568,7 @@ export default async function SocketHandler(
             socket.id === userInPrivateCall.socketId
           ) {
             console.log(
-              `Socket.IO: Usuario ${socket.id} en llamada privada desconectado.`
+              `Socket.IO: User ${socket.id} in private call disconnected.`
             );
             if (adminForPrivateCall) {
               const adminSocketInstance = io.sockets.sockets.get(
@@ -588,56 +585,60 @@ export default async function SocketHandler(
             adminForPrivateCall = null;
           }
 
-          // Si este socket era usuario autorizado y estaba en private call
-          const refreshedSettings = await getCachedSiteSettings();
+          const refreshedSettings = await getCachedSiteSettings(); // Use await here
           if (
             socket.data.appUserId &&
             refreshedSettings?.liveStreamAuthorizedUserId ===
               socket.data.appUserId
           ) {
-            const adminSocketInstance = adminForPrivateCall
-              ? io.sockets.sockets.get(adminForPrivateCall.socketId)
-              : Array.from(io.sockets.sockets.values()).find(
-                  (s) =>
-                    s.data.appUserId ===
-                    process.env.ADMIN_APP_USER_ID_PLACEHOLDER
-                ); // Fallback
-            if (adminSocketInstance && adminSocketInstance.connected) {
-              adminSocketInstance.emit('authorized-user-status', {
-                userId: socket.data.appUserId,
-                isConnected: false,
-                userSocketId: socket.id,
-              });
-            }
+             let adminSocketToNotifyId: string | null = null;
+             if (adminForPrivateCall && adminForPrivateCall.appUserId === refreshedSettings.adminAppUserId) { // Assuming adminAppUserId is stored in settings or a known constant
+                adminSocketToNotifyId = adminForPrivateCall.socketId;
+             } else {
+                // Fallback: find an admin socket if adminForPrivateCall is not set or not the one we expect
+                const adminSocketFound = Array.from(io.sockets.sockets.values()).find(s => s.data.appUserId === refreshedSettings.adminAppUserId); // Replace with actual admin user ID logic
+                if (adminSocketFound) adminSocketToNotifyId = adminSocketFound.id;
+             }
+
+             if (adminSocketToNotifyId) {
+                const adminSocketInstance = io.sockets.sockets.get(adminSocketToNotifyId);
+                if (adminSocketInstance && adminSocketInstance.connected) {
+                    adminSocketInstance.emit('authorized-user-status', {
+                        userId: socket.data.appUserId,
+                        isConnected: false,
+                        userSocketId: socket.id,
+                    });
+                }
+             }
           }
         } catch (error) {
           console.error(
-            `Socket.IO: Error en 'disconnect' handler para ${socket.id}:`,
+            `Socket.IO: Error in 'disconnect' handler for ${socket.id}:`,
             error
           );
         }
       });
 
-      // ----------- LÓGICA DE LLAMADAS PRIVADAS (sin cambios) -----------
+      // Private Call Handlers
       socket.on(
         'admin-initiate-private-call-request',
         async ({ targetUserAppId }: { targetUserAppId: string }) => {
           try {
             console.log(
-              `Socket.IO: Admin ${socket.id} (AppUser: ${socket.data.appUserId}) iniciando llamada privada a ${targetUserAppId}`
+              `Socket.IO: Admin ${socket.id} (AppUser: ${socket.data.appUserId}) initiating private call to ${targetUserAppId}`
             );
-            const currentSettingsForCall = await getCachedSiteSettings();
+            const currentSettingsForCall = await getCachedSiteSettings(); // Use await
             if (!socket.data.appUserId || !currentSettingsForCall) {
               if (socket.connected)
                 socket.emit('private-call-error', {
-                  message: 'Server/user data not ready.',
+                  message: 'Server/user data not ready for private call.',
                 });
               return;
             }
             if (generalBroadcasterSocketId === socket.id) {
               if (socket.connected)
                 socket.emit('private-call-error', {
-                  message: 'Stop general stream first.',
+                  message: 'Please stop the general stream before starting a private call.',
                 });
               return;
             }
@@ -647,7 +648,7 @@ export default async function SocketHandler(
             ) {
               if (socket.connected)
                 socket.emit('private-call-error', {
-                  message: 'Another admin is in a call or waiting.',
+                  message: 'Another admin is already in a private call or waiting for one.',
                 });
               return;
             }
@@ -669,7 +670,7 @@ export default async function SocketHandler(
 
             if (targetUserSocket && targetUserSocket.connected) {
               console.log(
-                `Socket.IO: Target user ${targetUserAppId} conectado (socket ${targetUserSocket.id}). Emitting invite.`
+                `Socket.IO: Target user ${targetUserAppId} is connected (socket ${targetUserSocket.id}). Emitting private call invite.`
               );
               targetUserSocket.emit('private-call-invite-from-admin', {
                 adminSocketId: socket.id,
@@ -682,7 +683,7 @@ export default async function SocketHandler(
                 });
             } else {
               console.log(
-                `Socket.IO: Target user ${targetUserAppId} no conectado. Agregando a pending calls.`
+                `Socket.IO: Target user ${targetUserAppId} is not connected. Adding to pending private calls.`
               );
               pendingPrivateCalls.set(targetUserAppId, {
                 adminSocketId: socket.id,
@@ -695,9 +696,10 @@ export default async function SocketHandler(
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'admin-initiate-private-call-request' para ${socket.id}:`,
+              `Socket.IO: Error in 'admin-initiate-private-call-request' for ${socket.id}:`,
               error
             );
+             if (socket.connected) socket.emit('private-call-error', { message: 'Server error initiating private call.' });
           }
         }
       );
@@ -707,7 +709,7 @@ export default async function SocketHandler(
         ({ adminSocketId }: { adminSocketId: string }) => {
           try {
             console.log(
-              `Socket.IO: User ${socket.id} (AppUser: ${socket.data.appUserId}) acepta llamada privada de admin ${adminSocketId}`
+              `Socket.IO: User ${socket.id} (AppUser: ${socket.data.appUserId}) accepts private call from admin ${adminSocketId}`
             );
             if (
               !adminForPrivateCall ||
@@ -716,7 +718,7 @@ export default async function SocketHandler(
             ) {
               if (socket.connected)
                 socket.emit('private-call-error', {
-                  message: 'Admin not ready or invalid request.',
+                  message: 'Admin is not ready or this is an invalid request.',
                 });
               return;
             }
@@ -726,7 +728,7 @@ export default async function SocketHandler(
             ) {
               if (socket.connected)
                 socket.emit('private-call-error', {
-                  message: 'Admin in call with another user.',
+                  message: 'Admin is already in a call with another user.',
                 });
               return;
             }
@@ -744,13 +746,14 @@ export default async function SocketHandler(
               userInPrivateCall = null;
               adminForPrivateCall = null;
               if (socket.connected)
-                socket.emit('private-call-error', { message: 'Admin disconnected.' });
+                socket.emit('private-call-error', { message: 'Admin disconnected before call setup.' });
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'user-accepts-private-call' para ${socket.id}:`,
+              `Socket.IO: Error in 'user-accepts-private-call' for ${socket.id}:`,
               error
             );
+            if (socket.connected) socket.emit('private-call-error', { message: 'Server error accepting private call.' });
           }
         }
       );
@@ -771,10 +774,12 @@ export default async function SocketHandler(
                 senderSocketId: socket.id,
                 offer,
               });
+            } else {
+                console.warn(`Socket.IO: Target socket ${targetSocketId} for SDP offer not found or disconnected.`);
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'private-sdp-offer' para ${socket.id}:`,
+              `Socket.IO: Error in 'private-sdp-offer' for ${socket.id} to ${targetSocketId}:`,
               error
             );
           }
@@ -797,10 +802,12 @@ export default async function SocketHandler(
                 senderSocketId: socket.id,
                 answer,
               });
+            } else {
+                 console.warn(`Socket.IO: Target socket ${targetSocketId} for SDP answer not found or disconnected.`);
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'private-sdp-answer' para ${socket.id}:`,
+              `Socket.IO: Error in 'private-sdp-answer' for ${socket.id} to ${targetSocketId}:`,
               error
             );
           }
@@ -823,10 +830,12 @@ export default async function SocketHandler(
                 senderSocketId: socket.id,
                 candidate,
               });
+            } else {
+                console.warn(`Socket.IO: Target socket ${targetSocketId} for ICE candidate not found or disconnected.`);
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'private-ice-candidate' para ${socket.id}:`,
+              `Socket.IO: Error in 'private-ice-candidate' for ${socket.id} to ${targetSocketId}:`,
               error
             );
           }
@@ -842,7 +851,7 @@ export default async function SocketHandler(
               socket.id === adminForPrivateCall.socketId
             ) {
               console.log(
-                `Socket.IO: Admin ${socket.id} finalizando private call.`
+                `Socket.IO: Admin ${socket.id} is ending private call.`
               );
               const targetUserSocketId = userInPrivateCall
                 ? userInPrivateCall.socketId
@@ -857,6 +866,7 @@ export default async function SocketHandler(
               }
               adminForPrivateCall = null;
               userInPrivateCall = null;
+              // Clear pending calls initiated by this admin
               for (const [userId, info] of pendingPrivateCalls) {
                 if (info.adminSocketId === socket.id) {
                   pendingPrivateCalls.delete(userId);
@@ -865,7 +875,7 @@ export default async function SocketHandler(
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'admin-end-private-call' para ${socket.id}:`,
+              `Socket.IO: Error in 'admin-end-private-call' for ${socket.id}:`,
               error
             );
           }
@@ -889,13 +899,15 @@ export default async function SocketHandler(
               if (targetUserSocket && targetUserSocket.connected) {
                 targetUserSocket.emit('private-call-terminated-by-admin');
               }
-              adminForPrivateCall = null;
-              userInPrivateCall = null;
+              if (userInPrivateCall && userInPrivateCall.appUserId === targetUserAppId) {
+                userInPrivateCall = null;
+              }
+              adminForPrivateCall = null; // Admin is no longer in any call
               pendingPrivateCalls.delete(targetUserAppId);
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'admin-end-private-call-for-user-app-id' para ${socket.id}:`,
+              `Socket.IO: Error in 'admin-end-private-call-for-user-app-id' for ${socket.id}:`,
               error
             );
           }
@@ -911,7 +923,7 @@ export default async function SocketHandler(
               socket.id === userInPrivateCall.socketId
             ) {
               console.log(
-                `Socket.IO: User ${socket.id} terminó private call.`
+                `Socket.IO: User ${socket.id} ended the private call.`
               );
               const targetAdminSocketId = adminForPrivateCall
                 ? adminForPrivateCall.socketId
@@ -932,13 +944,12 @@ export default async function SocketHandler(
             }
           } catch (error) {
             console.error(
-              `Socket.IO: Error en 'user-end-private-call' para ${socket.id}:`,
+              `Socket.IO: Error in 'user-end-private-call' for ${socket.id}:`,
               error
             );
           }
         }
       );
-      // ----------- FIN LÓGICA DE LLAMADAS PRIVADAS -----------
 
     });
 
@@ -948,6 +959,5 @@ export default async function SocketHandler(
     console.log('Socket.IO: IOServer instance already running.');
   }
 
-  console.log('Socket.IO: SocketHandler API route finalizó respuesta');
   res.end();
 }
