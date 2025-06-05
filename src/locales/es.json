@@ -1,7 +1,7 @@
 
 {
   "header": {
-    "title": "Aurum Media",
+    "title": "ONLYfansLY",
     "home": "Inicio",
     "videos": "Cursos",
     "live": "En Vivo",
@@ -86,8 +86,8 @@
   },
   "homepage": {
     "hero": {
-      "title": "Descubre Aurum Media",
-      "subtitle": "Sumérgete en una colección curada de contenido de video premium, diseñado para inspirar y cautivar.",
+      "title": "ONLYfansLY",
+      "subtitle": "La mejor colección de cursos en video diseñados para inspirarte al éxito!",
       "exploreButton": "Explorar Cursos"
     },
     "live": {
@@ -133,6 +133,10 @@
       "adminEndedCallDesc": "El administrador ha finalizado la videollamada.",
       "cameraPermissionErrorTitle": "Error de Cámara/Micrófono",
       "cameraPermissionErrorDescription": "Por favor, otorga permisos para usar tu cámara y micrófono para la videollamada."
+    },
+    "controls": {
+      "mute": "Silenciar",
+      "unmute": "Activar sonido"
     }
   },
   "curatedTestimonials": {
@@ -161,7 +165,7 @@
     "noMedia": "No se enviaron fotos o videos adicionales con este testimonio."
   },
   "adminLayout": {
-    "sidebarTitle": "Aurum Admin",
+    "sidebarTitle": "ONLYfansLY Admin",
     "dashboard": "Tablero",
     "courses": "Cursos",
     "liveStream": "Transmisión en Vivo",
@@ -182,7 +186,7 @@
   },
   "adminDashboard": {
     "title": "Tablero de Administración",
-    "description": "Resumen de la plataforma Aurum Media.",
+    "description": "Resumen de la plataforma ONLYfansLY.",
     "customizeAppearanceButton": "Cambiar Apariencia",
     "overview": {
       "totalCourses": "Cursos Totales",
@@ -223,7 +227,7 @@
   },
 "adminLivestream": {
   "pageTitle": "Control de Transmisión en Vivo",
-  "defaultStreamTitle": "Evento en Vivo de Aurum",
+  "defaultStreamTitle": "Evento en Vivo de ONLYfansLY",
   "defaultOfflineMessage": "La transmisión en vivo está actualmente desconectada. ¡Vuelve pronto!",
   "configCard": {
     "title": "Configuración de Transmisión",
@@ -799,7 +803,7 @@
   },
   "registerPage": {
     "title": "Crea Tu Cuenta",
-    "description": "Únete a Aurum Media y desbloquea contenido exclusivo.",
+    "description": "Únete a ONLYfansLY y desbloquea contenido exclusivo.",
     "form": {
       "name": "Nombre",
       "namePlaceholder": "Ej: Juan",
@@ -841,7 +845,7 @@
     "activateAccountTitle": "Activa Tu Cuenta",
     "welcomeBackTitle": "Bienvenido de Nuevo",
     "enterTokenDescription": "Ingresa el token de activación enviado a tu correo electrónico.",
-    "loginToAccessDescription": "Inicia sesión para acceder a tu cuenta de Aurum Media.",
+    "loginToAccessDescription": "Inicia sesión para acceder a tu cuenta de ONLYfansLY.",
     "emailLabel": "Correo Electrónico",
     "emailPlaceholder": "tu@ejemplo.com",
     "passwordLabel": "Contraseña",
