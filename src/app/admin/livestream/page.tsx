@@ -260,18 +260,6 @@ export default function LiveStreamAdminPage() {
     const onConnect = () => {
       console.log('AdminLiveStream: Socket conectado. Socket ID:', socket.id);
       toast({ title: t('adminLivestream.toast.socketConnectedTitle'), description: t('adminLivestream.toast.socketConnectedDescription') });
-
-      // Si ya estaba transmitiendo antes de reconectar, re-registrarse como broadcaster
-      if (isGeneralStreamActive && adminLocalStreamForGeneral && socket.connected) {
-        console.log('AdminLiveStream: Re-registrando general broadcaster tras reconexión.');
-        socket.emit('register-general-broadcaster', {
-          streamTitle: currentGeneralStreamTitle,
-          streamSubtitle: currentGeneralStreamSubtitle,
-          isLoggedInOnly: localLiveStreamForLoggedInOnly
-        });
-      }
-
-      // Re-solicitar estado del usuario autorizado para llamadas
       if (siteSettings?.liveStreamAuthorizedUserId) {
         socket.emit('request-authorized-user-status', { targetUserAppId: siteSettings.liveStreamAuthorizedUserId });
       }
@@ -310,26 +298,16 @@ export default function LiveStreamAdminPage() {
     const onNewGeneralViewer = ({ viewerId }: { viewerId: string }) => {
       console.log("AdminLiveStream: 'new-general-viewer' recibido de viewerId:", viewerId);
       setGeneralStreamViewerCount((prev) => prev + 1);
-
-      // Intento inmediato de iniciar WebRTC para nuevo viewer
       if (isGeneralStreamActive && adminLocalStreamForGeneral && socket && socket.connected) {
         console.log('AdminLiveStream: Iniciando WebRTC para nuevo general viewer:', viewerId);
         initiateWebRTCForGeneralViewer(viewerId, adminLocalStreamForGeneral, socket);
       } else {
-        // Si no está listo aún, reintentar hasta 3 veces cada segundo
-        let retryCount = 0;
-        const tryInitiate = () => {
-          if (isGeneralStreamActive && adminLocalStreamForGeneral && socket && socket.connected) {
-            console.log('AdminLiveStream: Reintentando WebRTC para general viewer:', viewerId);
-            initiateWebRTCForGeneralViewer(viewerId, adminLocalStreamForGeneral, socket);
-          } else if (retryCount < 3) {
-            retryCount++;
-            setTimeout(tryInitiate, 1000);
-          } else {
-            console.warn('AdminLiveStream: No se pudo iniciar WebRTC para viewer después de varios intentos:', viewerId);
-          }
-        };
-        tryInitiate();
+        console.log(
+          'AdminLiveStream: No se puede iniciar WebRTC para nuevo viewer. isGeneralStreamActive:',
+          isGeneralStreamActive,
+          'adminLocalStreamForGeneral:',
+          !!adminLocalStreamForGeneral
+        );
       }
     };
     const onAnswerFromGeneralViewer = async ({ viewerId, answer }: { viewerId: string; answer: RTCSessionDescriptionInit }) => {
@@ -372,26 +350,6 @@ export default function LiveStreamAdminPage() {
       peerConnectionsRef.current.delete(viewerId);
       setGeneralStreamViewerCount((prev) => Math.max(0, prev - 1));
     };
-    const onGeneralBroadcasterDisconnected = () => {
-      console.log("AdminLiveStream: Evento 'general-broadcaster-disconnected' recibido.");
-      // Otro admin / servidor detuvo el stream; limpiar estado local
-      if (isGeneralStreamActive) {
-        setIsGeneralStreamActive(false);
-        if (adminLocalStreamForGeneral) {
-          adminLocalStreamForGeneral.getTracks().forEach((track) => track.stop());
-          setAdminLocalStreamForGeneral(null);
-        }
-        if (localVideoRef.current) localVideoRef.current.srcObject = null;
-        peerConnectionsRef.current.forEach((pc) => pc.close());
-        peerConnectionsRef.current.clear();
-        setGeneralStreamViewerCount(0);
-        toast({
-          title: t('adminLivestream.toast.streamStoppedByServerTitle'),
-          description: t('adminLivestream.toast.streamStoppedByServerDescription'),
-          variant: 'destructive'
-        });
-      }
-    };
 
     // ---------- Authorized User Status ----------
     const onAuthorizedUserStatus = ({
@@ -421,26 +379,24 @@ export default function LiveStreamAdminPage() {
     // ---------- Private Call Events ----------
     const onPrivateCallUserReadyForOffer = ({ userSocketId, userAppUserId }: { userSocketId: string; userAppUserId: string }) => {
       console.log("AdminLiveStream: 'private-call-user-ready-for-offer' recibido:", { userSocketId, userAppUserId });
-      // Intento inmediato o con retry para iniciar llamada
-      const tryInitiateCall = (retryCount = 0) => {
-        if (
-          userAppUserId === siteSettings?.liveStreamAuthorizedUserId &&
-          isPrivateCallActive &&
-          adminLocalStreamForCall &&
-          socket &&
-          socket.connected
-        ) {
-          setAuthorizedUserSocketIdForCall(userSocketId);
-          console.log('AdminLiveStream: Iniciando WebRTC offer para llamada privada a:', userSocketId);
-          initiateWebRTCPrivateCallOffer(userSocketId, socket);
-        } else if (retryCount < 3) {
-          console.log('AdminLiveStream: Retry iniciar llamada privada en 1s (retryCount:', retryCount + 1, ')');
-          setTimeout(() => tryInitiateCall(retryCount + 1), 1000);
-        } else {
-          console.warn('AdminLiveStream: No se pudo iniciar llamada privada después de varios intentos.');
-        }
-      };
-      tryInitiateCall();
+      if (
+        userAppUserId === siteSettings?.liveStreamAuthorizedUserId &&
+        isPrivateCallActive &&
+        adminLocalStreamForCall &&
+        socket &&
+        socket.connected
+      ) {
+        setAuthorizedUserSocketIdForCall(userSocketId);
+        console.log('AdminLiveStream: Iniciando WebRTC offer para llamada privada a:', userSocketId);
+        initiateWebRTCPrivateCallOffer(userSocketId, socket);
+      } else {
+        console.log(
+          'AdminLiveStream: Condiciones no cumplidas para "private-call-user-ready-for-offer". isPrivateCallActive:',
+          isPrivateCallActive,
+          'adminLocalStreamForCall:',
+          !!adminLocalStreamForCall
+        );
+      }
     };
     const onPrivateSdpAnswerReceived = async ({ senderSocketId, answer }: { senderSocketId: string; answer: RTCSessionDescriptionInit }) => {
       console.log("AdminLiveStream: 'private-sdp-answer-received' de senderSocketId:", senderSocketId);
@@ -519,8 +475,6 @@ export default function LiveStreamAdminPage() {
     socket.on('candidate-from-general-viewer', onCandidateFromGeneralViewer);
     socket.on('viewer-disconnected', onViewerDisconnected);
 
-    socket.on('general-broadcaster-disconnected', onGeneralBroadcasterDisconnected);
-
     socket.on('authorized-user-status', onAuthorizedUserStatus);
     socket.on('private-call-user-ready-for-offer', onPrivateCallUserReadyForOffer);
     socket.on('private-sdp-answer-received', onPrivateSdpAnswerReceived);
@@ -539,8 +493,6 @@ export default function LiveStreamAdminPage() {
       socket.off('answer-from-general-viewer', onAnswerFromGeneralViewer);
       socket.off('candidate-from-general-viewer', onCandidateFromGeneralViewer);
       socket.off('viewer-disconnected', onViewerDisconnected);
-
-      socket.off('general-broadcaster-disconnected', onGeneralBroadcasterDisconnected);
 
       socket.off('authorized-user-status', onAuthorizedUserStatus);
       socket.off('private-call-user-ready-for-offer', onPrivateCallUserReadyForOffer);
@@ -562,10 +514,7 @@ export default function LiveStreamAdminPage() {
     t,
     handleEndPrivateCall,
     adminLocalStreamForGeneral,
-    adminLocalStreamForCall,
-    localLiveStreamForLoggedInOnly,
-    currentGeneralStreamTitle,
-    currentGeneralStreamSubtitle
+    adminLocalStreamForCall
   ]);
 
   // -------- Request camera/mic permission helper --------
@@ -729,7 +678,7 @@ export default function LiveStreamAdminPage() {
             streamSubtitle: currentGeneralStreamSubtitle,
             isLoggedInOnly: localLiveStreamForLoggedInOnly
           });
-          console.log(`AdminLiveStream: 'register-general-broadcaster' emitido, socket.id = ${socket.id}`);
+          console.log("AdminLiveStream: 'register-general-broadcaster' emitido, socket.id =", socket.id);
         } else {
           toast({
             title: t('adminLivestream.toast.errorTitle'),
@@ -793,7 +742,7 @@ export default function LiveStreamAdminPage() {
       if (event.candidate && currentSocket.connected) {
         console.log('AdminLiveStream: Enviando ICE candidate privado a usuario:', targetUserSocketId);
         try {
-          currentSocket.emit('private-ice-candidate', { targetSocketId, candidate: event.candidate });
+          currentSocket.emit('private-ice-candidate', { targetSocketId: targetUserSocketId, candidate: event.candidate });
         } catch (e: any) {
           console.error('AdminLiveStream: Error emitiendo ICE privado:', e.message);
         }
@@ -825,7 +774,7 @@ export default function LiveStreamAdminPage() {
       const offer = await peerConnectionForCallRef.current.createOffer();
       await peerConnectionForCallRef.current.setLocalDescription(offer);
       if (currentSocket.connected) {
-        currentSocket.emit('private-sdp-offer', { targetSocketId, offer });
+        currentSocket.emit('private-sdp-offer', { targetSocketId: targetUserSocketId, offer });
         setPrivateCallStatus(t('adminLivestream.privateCall.statusConnecting', { userName: authorizedUserForStream?.name || 'User' }));
         console.log('AdminLiveStream: SDP offer privado enviada a usuario:', targetUserSocketId);
       } else {
@@ -836,7 +785,7 @@ export default function LiveStreamAdminPage() {
       console.error('AdminLiveStream: Error creando/enviando oferta privada:', error.message);
       setPrivateCallStatus(t('adminLivestream.privateCall.statusFailed'));
       toast({ variant: 'destructive', title: 'WebRTC Error', description: `Failed to create private call offer. Err: ${error.message}` });
-      handleEndPrivateCall(false, 'Error creando/enviando oferta privada');
+      handleEndPrivateCall(false, 'Error creando/envíando oferta privada');
     }
   };
 
@@ -1130,7 +1079,7 @@ export default function LiveStreamAdminPage() {
             <span className={cn('font-semibold', isGeneralStreamActive ? 'text-red-500' : 'text-gray-500')}>
               {isGeneralStreamActive ? t('adminLivestream.configCard.statusLive') : t('adminLivestream.configCard.statusOffline')}
             </span>{' '}
-            {isGeneralStreamActive && (`${generalStreamViewerCount} ${t('adminLivestream.statsCard.viewersLabel')}`)}
+            {isGeneralStreamActive && `(${generalStreamViewerCount} ${t('adminLivestream.statsCard.viewersLabel')})`}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             {isGeneralStreamActive && siteSettings?.liveStreamForLoggedInUsersOnly && (
