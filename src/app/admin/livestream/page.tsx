@@ -180,8 +180,9 @@ export default function LiveStreamAdminPage() {
       setLocalLiveStreamForLoggedInOnly(siteSettings.liveStreamForLoggedInUsersOnly || false);
 
       setCurrentGeneralStreamTitle(siteSettings.liveStreamDefaultTitle || '');
-      setCurrentGeneralStreamSubtitle(siteSettings.liveStreamSubtitle || '');
-
+      //setCurrentGeneralStreamSubtitle(siteSettings.persistentSubtitle || '');
+      console.log('AdminLiveStream (useEffect siteSettings): siteSettings.persistentSubtitle =', siteSettings.persistentSubtitle); // <-- Added console.log here
+      setPersistentSettingsSubtitle(siteSettings.persistentSubtitle || '');
       if (
         siteSettings.liveStreamAuthorizedUserId &&
         siteSettings.liveStreamAuthorizedUserId !== authorizedUserForStream?.id
@@ -194,7 +195,6 @@ export default function LiveStreamAdminPage() {
       }
     }
   }, [siteSettings, t, fetchAuthorizedUserData, authorizedUserForStream?.id]);
-
   // -------- End private call cleanup --------
   const handleEndPrivateCall = useCallback(
     (emitToServer = true, reason = 'Admin ended call') => {
@@ -269,7 +269,7 @@ export default function LiveStreamAdminPage() {
       toast({ variant: 'destructive', title: 'Socket Connection Error', description: `Admin: ${error.message}` });
     };
     const onDisconnect = (reason: Socket.DisconnectReason) => {
-      const wasGeneralBroadcaster = socket.data && (socket.data as any).isGeneralBroadcaster;
+      const wasGeneralBroadcaster = (socket as any).data?.isGeneralBroadcaster;
       console.log(
         `AdminLiveStream: Socket desconectado. Reason: ${reason}. WasGeneralBroadcaster: ${wasGeneralBroadcaster}, isPrivateCallActive: ${isPrivateCallActive}`
       );
@@ -839,7 +839,7 @@ export default function LiveStreamAdminPage() {
     try {
       const payload: Partial<SiteSettings> = {
         liveStreamDefaultTitle: currentGeneralStreamTitle,
-        liveStreamSubtitle: currentGeneralStreamSubtitle,
+        persistentSubtitle: persistentSettingsSubtitle,
         liveStreamOfflineMessage: localOfflineMessage,
         liveStreamForLoggedInUsersOnly: localLiveStreamForLoggedInOnly
       };

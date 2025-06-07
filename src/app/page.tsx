@@ -124,7 +124,7 @@ export default function HomePage() {
       setCurrentExchangeRates(siteSettings.exchangeRates);
       if (!isGeneralStreamLive && !isUserInPrivateCall) {
         setGeneralStreamTitle(siteSettings.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-        setGeneralStreamSubtitle(siteSettings.liveStreamSubtitle || '');
+        setGeneralStreamSubtitle(siteSettings.persistentSubtitle || '');
       }
     }
   }, [siteSettings, t, isGeneralStreamLive, isUserInPrivateCall]);
@@ -350,7 +350,7 @@ export default function HomePage() {
         setGeneralStreamReceived(null);
         setIsLoadingGeneralStream(false);
         setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-        setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
+        setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.persistentSubtitle || '');
         toast({
           title: t('homepage.live.accessDenied'),
           description: t('homepage.live.accessDeniedDescription'),
@@ -370,7 +370,7 @@ export default function HomePage() {
       if (broadcasterId !== currentBroadcasterId) {
         setCurrentBroadcasterId(broadcasterId);
         setGeneralStreamTitle(titleFromServer || siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-        setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.liveStreamSubtitle || '');
+        setGeneralStreamSubtitle(subtitleFromServer || siteSettings?.persistentSubtitle || '');
         setIsGeneralStreamLive(true);
         setGeneralStreamWebRtcError(null);
 
@@ -400,7 +400,7 @@ export default function HomePage() {
       }
       setGeneralStreamWebRtcError(null);
       setGeneralStreamTitle(siteSettings?.liveStreamDefaultTitle || t('homepage.live.defaultTitle'));
-      setGeneralStreamSubtitle(siteSettings?.liveStreamSubtitle || '');
+      setGeneralStreamSubtitle(siteSettings?.persistentSubtitle || '');
     };
 
     const onGeneralBroadcasterDisconnected = onGeneralStreamEnded;
@@ -1116,9 +1116,9 @@ export default function HomePage() {
               <p className="text-muted-foreground mb-4 text-lg">{t('homepage.live.broadcastingNow')}</p>
             )}
             {!showPrivateCallUI && !isGeneralStreamLive && (
-              <p className="text-muted-foreground mb-4 text-lg">
-                {siteLiveStreamOfflineMessage || t('homepage.live.currentlyOffline')}
-              </p>
+             <p className="text-muted-foreground mb-4 text-lg">
+               {siteSettings?.persistentSubtitle || t('homepage.live.currentlyOffline')}
+             </p>
             )}
 
             <div className="bg-card p-4 md:p-8 rounded-lg shadow-xl max-w-3xl mx-auto relative">

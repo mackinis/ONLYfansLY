@@ -145,6 +145,7 @@ export interface SiteSettings {
   showIosApp?: boolean;
   iosAppLink?: string;
   iosAppIconUrl?: string; 
+  persistentSubtitle?: string;
 }
 
 export interface ThemeColorSetting { 

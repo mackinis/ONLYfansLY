@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+ DialogDescription,
 } from '@/components/ui/dialog';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/context/I18nContext';
@@ -98,6 +99,9 @@ export default function VideoPlayerModal({ isOpen, onOpenChange, videoUrl, title
       <DialogContent className="sm:max-w-[900px] w-[90vw] bg-black border-primary shadow-xl p-2 md:p-4">
         <DialogHeader className="px-2 pt-2 md:px-4 md:pt-4">
           <DialogTitle className="font-headline text-xl md:text-2xl text-primary truncate">{title}</DialogTitle>
+          <DialogDescription>
+            Video playback window
+          </DialogDescription>
         </DialogHeader>
         <div className="aspect-video bg-black flex items-center justify-center mt-2 md:mt-0">
           {youtubeEmbedUrl ? (

@@ -109,6 +109,7 @@ export default function CourseDetailModal({
       <DialogContent className="sm:max-w-2xl w-[90vw] bg-card border-primary/30 shadow-xl p-0 max-h-[90vh] flex flex-col">
         <DialogHeader className="p-6 pb-4 border-b border-border flex-shrink-0">
           <DialogTitle className="font-headline text-2xl text-primary">{video.title}</DialogTitle>
+          <DialogDescription>Details of the course video</DialogDescription>
         </DialogHeader>
         
         <ScrollArea className="flex-grow overflow-y-auto">

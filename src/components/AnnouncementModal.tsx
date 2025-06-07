@@ -49,6 +49,7 @@ export default function AnnouncementModal({ isOpen, onOpenChange, announcement }
           <div className="flex items-center">
             <Megaphone className="mr-3 h-7 w-7 text-primary" />
             <DialogTitle className="font-headline text-2xl text-primary">{announcement.title}</DialogTitle>
+            <DialogDescription>Details of the announcement</DialogDescription>
           </div>
           {/* The default DialogContent includes its own close button, so this one is redundant.
           <DialogClose asChild>

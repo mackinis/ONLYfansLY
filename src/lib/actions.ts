@@ -955,6 +955,7 @@ export const siteSettingsInternalSchema = z.object({
   liveStreamDefaultTitle: z.string().default("Evento en Vivo"),
   liveStreamOfflineMessage: z.string().default("La transmisión en vivo está actualmente desconectada. ¡Vuelve pronto!"),
   liveStreamAuthorizedUserId: z.string().nullable().optional().default(null),
+  persistentSubtitle: z.string().optional(),
   liveStreamForLoggedInUsersOnly: z.boolean().optional().default(false),
   socialLinks: z.array(socialLinkSchemaDb).default([]),
   testimonialMediaOptions: z.enum(validTestimonialMediaOptions).default('both'),
@@ -1567,5 +1568,3 @@ export async function getDashboardStatsLogic(): Promise<DashboardStats> {
     };
   }
 }
-
-    
