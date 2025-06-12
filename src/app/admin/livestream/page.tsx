@@ -244,7 +244,7 @@ export default function LiveStreamAdminPage() {
     }
 
     console.log('AdminLiveStream: Inicializando conexión socket con adminAppUserId:', adminAppUserId);
-    const newSocket = io({ path: '/api/socket_io', query: { appUserId: adminAppUserId } });
+    const newSocket = io({ path: '/api/socket_io', query: { appUserId: adminAppUserId }, transports: ['websocket'] });
     setSocket(newSocket);
 
     return () => {
