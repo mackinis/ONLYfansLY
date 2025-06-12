@@ -92,6 +92,7 @@ export default function LiveStreamAdminPage() {
   const [adminLocalStreamForGeneral, setAdminLocalStreamForGeneral] = useState<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const adminLocalStreamForGeneralRef = useRef<MediaStream | null>(null);
   const [generalStreamViewerCount, setGeneralStreamViewerCount] = useState(0);
 
   // -------- Private Bi-directional Call State --------
@@ -470,7 +471,7 @@ export default function LiveStreamAdminPage() {
     socket.on('connect_error', onConnectError);
     socket.on('disconnect', onDisconnect);
 
-    socket.on('new-general-viewer', onNewGeneralViewer);
+    //socket.on('new-general-viewer', onNewGeneralViewer);
     socket.on('answer-from-general-viewer', onAnswerFromGeneralViewer);
     socket.on('candidate-from-general-viewer', onCandidateFromGeneralViewer);
     socket.on('viewer-disconnected', onViewerDisconnected);
@@ -489,7 +490,7 @@ export default function LiveStreamAdminPage() {
       socket.off('connect_error', onConnectError);
       socket.off('disconnect', onDisconnect);
 
-      socket.off('new-general-viewer', onNewGeneralViewer);
+      //socket.off('new-general-viewer', onNewGeneralViewer);
       socket.off('answer-from-general-viewer', onAnswerFromGeneralViewer);
       socket.off('candidate-from-general-viewer', onCandidateFromGeneralViewer);
       socket.off('viewer-disconnected', onViewerDisconnected);
@@ -513,9 +514,12 @@ export default function LiveStreamAdminPage() {
     authorizedUserSocketIdForCall,
     t,
     handleEndPrivateCall,
-    adminLocalStreamForGeneral,
+    //adminLocalStreamForGeneral,
     adminLocalStreamForCall
   ]);
+
+    
+  
 
   // -------- Request camera/mic permission helper --------
   const getCameraPermission = async (forCall = false): Promise<MediaStream | null> => {
@@ -543,6 +547,7 @@ export default function LiveStreamAdminPage() {
         setAdminLocalStreamForCall(stream);
       } else {
         setAdminLocalStreamForGeneral(stream);
+        adminLocalStreamForGeneralRef.current = stream;
       }
       return stream;
     } catch (error: any) {
@@ -620,6 +625,33 @@ export default function LiveStreamAdminPage() {
       console.error('AdminLiveStream: Error creando/enviando offer a general viewer:', viewerId, error.message);
     }
   };
+
+  // —— useEffect dedicado a new-general-viewer usando el Ref ——
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewViewer = ({ viewerId }: { viewerId: string }) => {
+      const stream = adminLocalStreamForGeneralRef.current;
+      if (!isGeneralStreamActive || !stream) {
+        console.warn(
+          'AdminLiveStream: no tengo aún stream local cuando llegó new-general-viewer:',
+          { isGeneralStreamActive, hasStream: !!stream }
+        );
+        return;
+      }
+      console.log('AdminLiveStream: iniciando WebRTC para nuevo viewer desde Ref:', viewerId);
+      initiateWebRTCForGeneralViewer(viewerId, stream, socket);
+    };
+
+    socket.on('new-general-viewer', handleNewViewer);
+    return () => {
+      socket.off('new-general-viewer', handleNewViewer);
+    };
+  }, [
+    socket,
+    isGeneralStreamActive,
+    initiateWebRTCForGeneralViewer
+  ]);
 
   // -------- Toggle general streaming on/off --------
   const handleToggleGeneralStreaming = async () => {
