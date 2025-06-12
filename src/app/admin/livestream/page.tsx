@@ -244,7 +244,7 @@ export default function LiveStreamAdminPage() {
     }
 
     console.log('AdminLiveStream: Inicializando conexión socket con adminAppUserId:', adminAppUserId);
-    const newSocket = io({ path: '/api/socket_io', query: { appUserId: adminAppUserId }, transports: ['websocket'] });
+    const newSocket = io({ path: '/api/socket_io', query: { appUserId: adminAppUserId } });
     setSocket(newSocket);
 
     return () => {
@@ -260,38 +260,20 @@ export default function LiveStreamAdminPage() {
 
     const onConnect = () => {
       console.log('AdminLiveStream: Socket conectado. Socket ID:', socket.id);
-      toast({
-        title: t('adminLivestream.toast.socketConnectedTitle'),
-        description: t('adminLivestream.toast.socketConnectedDescription')
-      });
+      toast({ title: t('adminLivestream.toast.socketConnectedTitle'), description: t('adminLivestream.toast.socketConnectedDescription') });
       if (siteSettings?.liveStreamAuthorizedUserId) {
-        socket.emit('request-authorized-user-status', {
-          targetUserAppId: siteSettings.liveStreamAuthorizedUserId
-        });
+        socket.emit('request-authorized-user-status', { targetUserAppId: siteSettings.liveStreamAuthorizedUserId });
       }
     };
-    
     const onConnectError = (error: Error) => {
-      // ignora los fallos de polling y timeouts
-      if (/(xhr poll error|timeout)/i.test(error.message)) return;
-    
       console.error('AdminLiveStream: Error de conexión socket:', error.message);
-      toast({
-        variant: 'destructive',
-        title: 'Socket Connection Error',
-        description: `Admin: ${error.message}`
-      });
+      toast({ variant: 'destructive', title: 'Socket Connection Error', description: `Admin: ${error.message}` });
     };
-    
     const onDisconnect = (reason: Socket.DisconnectReason) => {
-      // ignora desconexiones por transporte cerrado o timeout
-      if (/transport close|timeout/i.test(reason)) return;
-    
       const wasGeneralBroadcaster = (socket as any).data?.isGeneralBroadcaster;
       console.log(
         `AdminLiveStream: Socket desconectado. Reason: ${reason}. WasGeneralBroadcaster: ${wasGeneralBroadcaster}, isPrivateCallActive: ${isPrivateCallActive}`
       );
-    
       if (reason !== 'io client disconnect') {
         toast({
           variant: 'destructive',
@@ -299,22 +281,19 @@ export default function LiveStreamAdminPage() {
           description: `${t('adminLivestream.toast.socketDisconnectedStreamInterrupt')} Reason: ${reason}`
         });
       }
-    
       // Cleanup general stream PCs
       peerConnectionsRef.current.forEach((pc) => pc.close());
       peerConnectionsRef.current.clear();
       setGeneralStreamViewerCount(0);
-    
       if (wasGeneralBroadcaster) {
         setIsGeneralStreamActive(false);
         setAdminLocalStreamForGeneral(null);
         if (localVideoRef.current) localVideoRef.current.srcObject = null;
       }
-    
       if (isPrivateCallActive) {
         handleEndPrivateCall(false, 'Admin socket disconnected');
       }
-    };    
+    };
 
     // ---------- General Stream Events ----------
     const onNewGeneralViewer = ({ viewerId }: { viewerId: string }) => {
